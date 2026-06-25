@@ -1,0 +1,33 @@
+# secrets
+.env
+*.key
+
+# python env / caches
+.venv/
+__pycache__/
+*.pyc
+
+# large downloaded data (re-fetchable)
+ojbench_data/
+ojbench_prompts/
+OJBench_repo/
+sdpo_paper/
+
+# model / training outputs
+sdpo_out/
+outputs/
+wandb/
+*.safetensors
+
+# generated experiment artifacts (regenerate via the scripts)
+ojb_responses_*.json
+ojb_responses_*.jsonl
+ojb_judged_*.json
+ojb_failures_*.jsonl
+results_gsm8k*.json
+sdpo_eval_*.json
+
+# logs & scratch
+*.log
+_sol_*.py
+_cpp_*

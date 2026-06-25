@@ -32,7 +32,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--served-model", required=True)
     ap.add_argument("--tag", required=True)
-    ap.add_argument("--max-tokens", type=int, default=8192)
+    ap.add_argument("--max-tokens", type=int, default=32768)
     ap.add_argument("--temperature", type=float, default=0.0)
     ap.add_argument("--languages", default="python,cpp")
     ap.add_argument("--concurrency", type=int, default=16)

@@ -40,7 +40,7 @@ def main():
     ap.add_argument("--max-steps", type=int, default=60)
     ap.add_argument("--num-generations", type=int, default=8)
     ap.add_argument("--lr", type=float, default=1e-4)
-    ap.add_argument("--max-completion-length", type=int, default=2048)
+    ap.add_argument("--max-completion-length", type=int, default=8192)
     ap.add_argument("--max-prompt-length", type=int, default=3072)
     ap.add_argument("--output-dir", default="sdpo_out")
     ap.add_argument("--difficulties", default="easy,medium", help="comma list, e.g. 'easy' or 'easy,medium'")
@@ -66,7 +66,7 @@ def main():
     # towers wrap projections in Gemma4ClippableLinear which PEFT can't target;
     # the text projections are plain nn.Linear. Regex => re.fullmatch in PEFT.
     peft_cfg = LoraConfig(
-        r=16, lora_alpha=32, lora_dropout=0.0, bias="none", task_type="CAUSAL_LM",
+        r=32, lora_alpha=64, lora_dropout=0.0, bias="none", task_type="CAUSAL_LM",
         target_modules=r".*language_model.*\.(q_proj|k_proj|v_proj|o_proj|gate_proj|up_proj|down_proj)$",
     )
 

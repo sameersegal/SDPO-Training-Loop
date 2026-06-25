@@ -84,7 +84,7 @@ implemented by TRL's `SDPOTrainer`.
 
 ## 7. Training configuration (`sdpo_train.py`)
 
-- **LoRA** (r=16, α=32) on the **text model only**: regex targets
+- **LoRA** (**r=32, α=64**) on the **text model only**: regex targets
   `language_model.*(q|k|v|o|gate|up|down)_proj` (gemma4's vision/audio towers use a custom
   `Gemma4ClippableLinear` that PEFT can't wrap — we deliberately skip them).
 - `num_generations=8`, `distillation_weight=1.0` (pure SDPO), `distillation_mode="topk_logits"`,
@@ -96,15 +96,21 @@ implemented by TRL's `SDPOTrainer`.
 
 ## 8. Evaluation  ← please validate this
 
-Reported **separately for Python and C++**, pass@1 (greedy), on the **15 hard held-out**
-problems, judged on **private** test cases:
+**Token budgets:** Gemma supports 128K context. **Eval** uses a generous **32k** completion
+cap (served at `max-model-len≈36k`) so long solutions don't truncate into false `NO_CODE`.
+**Training** keeps completions at **~8k** — SDPO's per-token KL distillation over G=8 rollouts
+makes 32k completions compute/memory-prohibitive, and easy/medium *training* solutions fit in 8k.
+
+Reported **separately for Python and C++**, pass@1 (greedy), on the **held-out** set
+(hard + frontier slice), judged on **private** test cases:
 
 - `sdpo_eval_base.json` — base Gemma
 - `sdpo_eval_sdpo.json` — after SDPO (merged LoRA)
 - Delta = post − base, per language × difficulty.
 
-**Regression probe:** GSM8K (2% sample) accuracy, base vs post, to catch capability
-degradation from code-only training. Base GSM8K (measured earlier, greedy) = **84.6%**.
+**Regression probe:** **full GSM8K** (all 1319 test problems) accuracy, base vs post, to catch
+capability degradation from code-only training. (A 2% sample earlier gave 84.6%; the full base
+number must be measured for a clean before/after — see handoff.)
 
 **W&B logging:** training streams to W&B (project `sdpo-gemma-ojbench`); held-out eval metrics
 are also pushed (`sdpo_eval_vllm.py --wandb`) as `heldout/<tag>/<lang>/<diff>_pass@1`.
@@ -138,11 +144,18 @@ python eval_runner.py --dataset gsm8k --sample-frac 0.02   # vs base 84.6%
 - ✅ Judge + py/cpp + public/private split built and tested.
 - ✅ TRL SDPO smoke test ran end-to-end (vLLM-colocate + LoRA + gemma4) — pipeline validated.
 - ✅ Splits rebuilt to **train=easy+medium, held-out=hard** (this change just landed).
-- ⏳ Hard held-out **test data** downloading now.
-- ⏳ **Baseline on the HARD held-out** not yet run (earlier 5/15 py, 6/15 cpp numbers were on an
-  *easy+medium* held-out, now superseded).
-- ⏳ Full SDPO training run + post-eval + GSM8K probe: **pending** (exceeds the 3-hour window;
-  intended to run in background and be read off W&B).
+- ✅ Hybrid held-out test data present (25 problems).
+- ✅ **Baseline measured** at the 32k eval cap (logged to W&B run `eval-base`):
+
+  | Held-out pass@1 | easy (5) | medium (5) | hard (15) | overall (25) |
+  |---|---|---|---|---|
+  | **python** | 1/5 | 0/5 | 0/15 | 1/25 |
+  | **cpp** | 3/5 | 1/5 | 0/15 | 4/25 |
+
+  ⚠️ **Variance:** greedy eval is run-to-run noisy due to vLLM batching nondeterminism; with
+  n=5 per cell the frontier numbers wobble (an 8k-cap run gave py-easy 3/5, cpp-easy 2/5). Treat
+  small cells as ±1–2. For a stable thermometer, use pass@k or more held-out problems.
+- ⏳ **SDPO training run + post-eval + full-GSM8K probe: NOT run** — handed off (see `HANDOFF.md`).
 
 ## 11. Locked decisions & remaining caveats
 

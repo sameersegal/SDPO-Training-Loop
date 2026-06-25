@@ -44,15 +44,17 @@ regression on **GSM8K**.
   test cases 50/50 into **public** (used as the training reward signal) and **private**
   (held back for held-out evaluation), to reduce reward-hacking.
 
-## 5. Data splits  ← please validate this
+## 5. Data splits (locked: hybrid held-out)
 
 | Split | Problems | Languages | Used for |
 |---|---|---|---|
-| **train** | all NOI **easy + medium** (73 problems) | **python + cpp** → **116 (problem,language) rows** | SDPO training reward |
-| **held-out** | 15 NOI **hard** problems | **python + cpp** → 30 eval items | generalization eval (pass@1) |
+| **train** | NOI **easy + medium** minus the held-out slice (63 problems: 15 easy + 48 medium) | **python + cpp** → 126 rows | SDPO training reward |
+| **held-out (hard)** | 15 NOI **hard** problems | **python + cpp** | generalization metric (expected ~0 early) |
+| **held-out (frontier slice)** | 5 easy + 5 medium | **python + cpp** | **progress thermometer** (sensitive metric that moves) |
 
-- No overlap: training never sees hard problems. Hard = pure generalization test
-  (matches your "keep Hard as the held-out set" goal).
+- **Decision:** hybrid held-out. Hard = the headline generalization claim; the easy/medium
+  slice is a sensitive gauge so we can tell whether the loop is learning at all (a 2.3B model
+  is expected near 0 on hard). Both slices are disjoint from training (no leakage).
 - **Frontier note:** we do **not** pre-compute a `pass@k` frontier map. SDPO's
   `use_successful_as_teacher=True` does *implicit, online* frontier selection — each step it
   samples G rollouts and only groups with ≥1 success produce a learning signal; all-fail
@@ -104,6 +106,9 @@ problems, judged on **private** test cases:
 **Regression probe:** GSM8K (2% sample) accuracy, base vs post, to catch capability
 degradation from code-only training. Base GSM8K (measured earlier, greedy) = **84.6%**.
 
+**W&B logging:** training streams to W&B (project `sdpo-gemma-ojbench`); held-out eval metrics
+are also pushed (`sdpo_eval_vllm.py --wandb`) as `heldout/<tag>/<lang>/<diff>_pass@1`.
+
 ## 9. Pipeline / scripts (reproducible)
 
 | File | Role |
@@ -139,15 +144,18 @@ python eval_runner.py --dataset gsm8k --sample-frac 0.02   # vs base 84.6%
 - ⏳ Full SDPO training run + post-eval + GSM8K probe: **pending** (exceeds the 3-hour window;
   intended to run in background and be read off W&B).
 
-## 11. Known caveats / open questions for you
+## 11. Locked decisions & remaining caveats
 
-1. **Hard is likely ~0 for a 2.3B model.** OJBench's own results show even frontier reasoning
-   models struggle on hard. Training is on easy+medium, so transfer to *hard* in a short run
-   may show little/no movement. Do you want hard-only held-out, or also keep a small
-   easy/medium held-out slice so we can *see* learning faster? (Currently: hard-only.)
-2. **Judge fidelity = reward fidelity.** Lightweight judge is fine for eval; for training it's
+**Decisions (this session):**
+- Held-out = **hybrid** (hard + easy/medium thermometer slice). [§5]
+- First-run feedback = **successful-rollouts-only** (TRL default); live judge-text feedback is
+  iteration 2. [§6]
+- First run = **quick prototype** (~10–20 steps) to validate the loop before a serious run.
+
+**Remaining caveats:**
+1. **Judge fidelity = reward fidelity.** Lightweight judge is fine for eval; for training it's
    the reward. A false-positive AC trains the wrong thing. Upgrade to real DMOJ later.
-3. **C++ TLEs / Python TLEs** are partly language artifacts, not reasoning errors.
-4. **TRL feedback limitation** (section 6) — live judge-text feedback is a fast-follow.
-5. **Compute reality:** on-policy SDPO with G=8 and 4k-token completions on one GPU is
-   minutes per step; a meaningful run is hours, not minutes.
+2. **C++ TLEs / Python TLEs** are partly language artifacts, not reasoning errors.
+3. **Compute reality:** on-policy SDPO with G=8 and ~4k-token completions on one GPU is
+   minutes per step; a *meaningful* delta needs hours, not the prototype's minutes.
+4. **Hard likely stays ~0 early** — that's why the easy/medium thermometer exists.

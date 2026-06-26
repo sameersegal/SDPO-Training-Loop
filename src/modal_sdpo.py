@@ -33,7 +33,7 @@ DATA = REPO / "data"
 # Code + judge ship to a FLAT /root/app layout (data via Volume), so absolute
 # local paths keep `modal run src/modal_sdpo.py` working from any CWD.
 _CODE = ["_paths.py", "ojbench_eval.py", "sdpo_ojbench.py", "sdpo_train.py",
-         "sdpo_passk.py", "sdpo_eval_vllm.py", "eval_runner.py"]
+         "sdpo_feedback.py", "sdpo_passk.py", "sdpo_eval_vllm.py", "eval_runner.py"]
 _DATA = ["ojb_splits.json", "ojbench_selected.json"]
 
 # CUDA *devel* base: flashinfer JIT-compiles kernels at runtime and needs nvcc.
@@ -159,6 +159,8 @@ def main(
     vllm_gpu_util: float = 0.25,  # 0.45 OOM'd the 80 GB H100; 0.25 is validated
     per_device_batch: int = 1,
     grad_checkpointing: bool = True,  # off => faster backward on the roomy H100
+    feedback: bool = False,           # iteration 02: live per-rollout judge feedback
+    lr: float = 1e-4,                 # iteration 02 recipe: try 3e-5
 ):
     num_gpus = int(gpu.split(":")[1]) if ":" in gpu else 1
     if smoke:
@@ -172,11 +174,14 @@ def main(
             "--max-steps", str(max_steps),
             "--vllm-gpu-util", str(vllm_gpu_util),
             "--per-device-batch", str(per_device_batch),
+            "--lr", str(lr),
             "--output-dir", "sdpo_out",
         ]
         if not grad_checkpointing:
             args.append("--no-grad-checkpointing")
-    print(f"[modal] gpu={gpu} num_gpus={num_gpus}  args={args}")
+    if feedback:
+        args.append("--feedback")
+    print(f"[modal] gpu={gpu} num_gpus={num_gpus} feedback={feedback}  args={args}")
     train.with_options(gpu=gpu).remote(args, num_gpus=num_gpus)
 
 

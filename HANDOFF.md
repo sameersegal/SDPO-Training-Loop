@@ -1,5 +1,11 @@
 # HANDOFF — SDPO post-training of Gemma-4-E2B-it on OJBench
 
+> ⚠️ **EXECUTED — kept for history.** These next-steps were carried out. Current results are in
+> **[`FINDINGS.md`](./FINDINGS.md)**, the reconciled design is in **[`EXPERIMENT.md`](./EXPERIMENT.md)**,
+> and cloud scale-up is in **[`MODAL.md`](./MODAL.md)**. Two things below changed in execution:
+> training is **easy-only** (easy+medium gave 0 successful rollouts), and the adapter is served via
+> **vLLM `--enable-lora`** (merging drops weights on this multimodal model). Read for context, not as current TODO.
+
 Read **`EXPERIMENT.md`** first (full design + locked decisions). This file is the operational
 state + exact next steps so another agent can continue without re-deriving anything.
 

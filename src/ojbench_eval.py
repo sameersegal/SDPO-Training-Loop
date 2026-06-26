@@ -153,11 +153,15 @@ def _clip(s, n=600):
 
 
 def judge_solution(code, cases, timeout):
-    """Run code against all cases with early exit.
+    """Run code against all cases with early exit, SMALLEST INPUT FIRST.
     Returns (verdict, passed_n, total, detail) where detail describes the first
-    failing case (for building the failure dataset)."""
+    failing case. Smallest-first means a failure surfaces a small, interpretable
+    case (better SDPO teacher feedback) and we fail fast on cheap cases. Order
+    does not change the AC verdict (must pass all); the public/private split is
+    decided upstream, so re-ordering here does not move cases between splits."""
     if not code:
         return "NO_CODE", 0, len(cases), {"reason": "no code block found in response"}
+    cases = sorted(cases, key=lambda c: c[0].stat().st_size)
     sol = ROOT / f"_sol_{os.getpid()}_{time.perf_counter_ns()}.py"
     sol.write_text(code)
     try:

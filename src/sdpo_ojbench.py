@@ -51,6 +51,7 @@ def judge_cpp(code, cases, timeout):
                             capture_output=True, timeout=60)
         if cp.returncode != 0:
             return "CE", 0, len(cases), {"stderr": _clip(cp.stderr.decode("utf-8", "replace"))}
+        cases = sorted(cases, key=lambda c: c[0].stat().st_size)  # smallest input first (see judge_solution)
         for k, (infile, outfile) in enumerate(cases):
             try:
                 proc = subprocess.run([str(binp)], input=infile.read_bytes(),

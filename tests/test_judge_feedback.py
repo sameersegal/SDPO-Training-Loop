@@ -97,3 +97,18 @@ def test_cpp_compile_error(tmp_path):
     bad = "int main(){ this is not c++ }\n"
     verdict, _, _, detail = judge_cpp(bad, cases(tmp_path, [("1", "1")]), timeout=5)
     assert verdict == "CE" and "stderr" in detail
+
+
+# --- B: judge smallest-input-first -> interpretable failure feedback ----------
+def test_smallest_failing_case_is_surfaced(tmp_path):
+    # huge failing case listed FIRST, tiny failing case listed second; both WA
+    (tmp_path / "small.in").write_text("1 1")
+    (tmp_path / "small.out").write_text("999")
+    (tmp_path / "big.in").write_text("1 1\n" + "0\n" * 20000)  # ~40 KB
+    (tmp_path / "big.out").write_text("999")
+    ordered = [(tmp_path / "big.in", tmp_path / "big.out"),       # huge listed first
+               (tmp_path / "small.in", tmp_path / "small.out")]
+    verdict, _, _, detail = judge_solution(SUM, ordered, timeout=5)  # SUM prints 2 -> both WA
+    assert verdict == "WA"
+    assert detail["failing_case"] == "small.in"   # smallest-first, not "big.in"
+    assert detail["input"] == "1 1"               # small, interpretable feedback

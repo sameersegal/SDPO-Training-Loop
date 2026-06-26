@@ -22,6 +22,7 @@ from peft import LoraConfig  # noqa: E402
 from trl.experimental.sdpo import SDPOConfig, SDPOTrainer  # noqa: E402
 
 from sdpo_ojbench import build_dataset, make_reward_func  # noqa: E402
+from sdpo_feedback import FeedbackSDPOTrainer, FeedbackBus, make_feedback_reward_func  # noqa: E402
 
 
 def main():
@@ -39,6 +40,8 @@ def main():
     ap.add_argument("--vllm-gpu-util", type=float, default=0.45)
     ap.add_argument("--reward-mode", default="fraction", choices=["fraction", "binary"],
                     help="dense passed/total (default) or strict AC=1/else 0")
+    ap.add_argument("--feedback", action="store_true",
+                    help="live per-rollout judge feedback into the SDPO teacher (iteration 02)")
     # Memory/speed knobs. Defaults are GB10-safe (microbatch=1 + grad ckpt).
     # On a roomier GPU (80 GB H100), --per-device-batch 2+ and/or
     # --no-grad-checkpointing trade memory for a faster step.
@@ -63,7 +66,12 @@ def main():
         args.num_generations = 4
         args.max_completion_length = 512
 
-    reward = make_reward_func(which="public", timeout=6.0, reward_mode=args.reward_mode)
+    bus = None
+    if args.feedback:
+        bus = FeedbackBus()
+        reward = make_feedback_reward_func(bus, which="public", timeout=6.0, reward_mode=args.reward_mode)
+    else:
+        reward = make_reward_func(which="public", timeout=6.0, reward_mode=args.reward_mode)
 
     # Restrict LoRA to the TEXT model (language_model). gemma4's vision/audio
     # towers wrap projections in Gemma4ClippableLinear which PEFT can't target;
@@ -86,6 +94,7 @@ def main():
         teacher_model_kind="ema",
         use_successful_as_teacher=True,
         success_reward_threshold=1.0,
+        include_environment_feedback=args.feedback,  # live judge feedback into the teacher
         # --- generation / RL ---
         num_generations=args.num_generations,
         max_completion_length=args.max_completion_length,
@@ -114,15 +123,18 @@ def main():
         run_name="sdpo-gemma-ojbench" + ("-smoke" if args.smoke else ""),
     )
 
-    trainer = SDPOTrainer(
-        model=args.model,
-        reward_funcs=reward,
-        args=cfg,
-        train_dataset=ds,
-        peft_config=peft_cfg,
-    )
+    if args.feedback:
+        trainer = FeedbackSDPOTrainer(
+            model=args.model, reward_funcs=reward, args=cfg,
+            train_dataset=ds, peft_config=peft_cfg, feedback_bus=bus,
+        )
+    else:
+        trainer = SDPOTrainer(
+            model=args.model, reward_funcs=reward, args=cfg,
+            train_dataset=ds, peft_config=peft_cfg,
+        )
     print(f"[sdpo] training: {len(ds)} problems, max_steps={args.max_steps}, "
-          f"G={args.num_generations}, report_to={report_to}")
+          f"G={args.num_generations}, feedback={args.feedback}, report_to={report_to}")
     trainer.train()
     trainer.save_model(args.output_dir)
     print(f"[sdpo] saved adapter to {args.output_dir}")

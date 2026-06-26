@@ -57,6 +57,8 @@ def main():
     ap.add_argument("--no-grad-checkpointing", dest="grad_checkpointing",
                     action="store_false",
                     help="disable activation checkpointing (faster backward, more memory)")
+    ap.add_argument("--save-steps", type=int, default=0,
+                    help="checkpoint every N steps (0 = save only the final adapter)")
     ap.add_argument("--no-wandb", action="store_true")
     args = ap.parse_args()
 
@@ -136,7 +138,9 @@ def main():
         gradient_checkpointing_kwargs={"use_reentrant": False},
         max_steps=args.max_steps,
         logging_steps=1,
-        save_strategy="no",
+        save_strategy=("steps" if args.save_steps > 0 else "no"),
+        save_steps=(args.save_steps if args.save_steps > 0 else 500),
+        save_total_limit=None,  # keep every checkpoint (we want the per-20-step history)
         bf16=True,
         report_to=report_to,
         run_name="sdpo-gemma-ojbench" + ("-smoke" if args.smoke else ""),

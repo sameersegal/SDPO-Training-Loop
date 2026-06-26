@@ -34,7 +34,7 @@ DATA = REPO / "data"
 # local paths keep `modal run src/modal_sdpo.py` working from any CWD.
 _CODE = ["_paths.py", "ojbench_eval.py", "sdpo_ojbench.py", "sdpo_train.py",
          "sdpo_feedback.py", "sdpo_passk.py", "sdpo_eval_vllm.py", "eval_runner.py"]
-_DATA = ["ojb_splits.json", "ojbench_selected.json"]
+_DATA = ["ojb_splits.json", "ojb_splits_full.json", "ojbench_selected.json"]
 
 # CUDA *devel* base: flashinfer JIT-compiles kernels at runtime and needs nvcc.
 # Versions pinned to match the validated GB10 venv exactly.
@@ -97,13 +97,18 @@ VOLUMES = {
     ],
     timeout=6 * 60 * 60,
 )
-def train(args: list[str], num_gpus: int = 1):
+def train(args: list[str], num_gpus: int = 1, ojb_splits: str = "ojb_splits_full.json"):
     import os
     import subprocess
     import sys
+    import threading
 
     os.chdir("/root/app")
     os.environ.setdefault("WANDB_PROJECT", APP_NAME)
+    # Iteration-03 trains on the full 206-pool. OJB_SPLITS is read at import time by
+    # sdpo_ojbench, so set it in the env the subprocess inherits.
+    os.environ["OJB_SPLITS"] = ojb_splits
+    print(f"[modal] OJB_SPLITS={ojb_splits}", flush=True)
 
     # Log the GPU actually provisioned (Modal's UI shows the decorator's declared
     # gpu, not the per-run .with_options() override — so confirm from inside).
@@ -136,11 +141,28 @@ def train(args: list[str], num_gpus: int = 1):
     else:
         cmd = [sys.executable, "sdpo_train.py", *args]
     print(f"[modal] num_gpus={num_gpus} running:", " ".join(cmd), flush=True)
-    subprocess.run(cmd, check=True)
 
-    outputs.commit()  # persist the saved adapter
-    hf_cache.commit()  # persist downloaded weights for next run
-    print("[modal] done — adapter saved to volume 'sdpo-outputs' (/sdpo_out)", flush=True)
+    # Commit the outputs volume periodically so per-20-step checkpoints become
+    # durable DURING the run (not just at the end) — a long run that dies mid-way
+    # still leaves its latest checkpoint on the volume to resume/eval from.
+    stop = threading.Event()
+
+    def _committer():
+        while not stop.wait(120):
+            try:
+                outputs.commit()
+            except Exception as e:  # noqa: BLE001
+                print(f"[modal] periodic commit failed: {e}", flush=True)
+
+    t = threading.Thread(target=_committer, daemon=True)
+    t.start()
+    try:
+        subprocess.run(cmd, check=True)
+    finally:
+        stop.set()
+        outputs.commit()  # persist the saved adapter + any final checkpoint
+        hf_cache.commit()  # persist downloaded weights for next run
+    print("[modal] done — adapter + checkpoints saved to volume 'sdpo-outputs' (/sdpo_out)", flush=True)
 
 
 @app.local_entrypoint()
@@ -162,10 +184,17 @@ def main(
     feedback: bool = False,           # iteration 02: live per-rollout judge feedback
     lr: float = 1e-4,                 # iteration 02 recipe: try 3e-5
     reward_mode: str = "fraction",    # "binary" = fast early-exit (medium's huge cases)
+    system: str = "cp_method",        # iteration 03 default system prompt (train==eval)
+    save_steps: int = 20,             # checkpoint cadence -> sdpo-outputs volume
+    ojb_splits: str = "ojb_splits_full.json",  # iteration 03: the full 206-pool
 ):
     num_gpus = int(gpu.split(":")[1]) if ":" in gpu else 1
     if smoke:
-        args = ["--smoke", "--difficulties", "easy", "--languages", languages]
+        # Smoke validates the REAL iteration-03 path (full split + dense + feedback +
+        # cp_method + checkpointing), just tiny. --smoke shrinks data/steps internally;
+        # --save-steps 1 forces a checkpoint write so the volume-commit path is exercised.
+        args = ["--smoke", "--difficulties", difficulties, "--languages", languages,
+                "--reward-mode", reward_mode, "--system", system, "--save-steps", "1"]
     else:
         args = [
             "--difficulties", difficulties,
@@ -177,14 +206,17 @@ def main(
             "--per-device-batch", str(per_device_batch),
             "--lr", str(lr),
             "--reward-mode", reward_mode,
+            "--system", system,
+            "--save-steps", str(save_steps),
             "--output-dir", "sdpo_out",
         ]
         if not grad_checkpointing:
             args.append("--no-grad-checkpointing")
     if feedback:
         args.append("--feedback")
-    print(f"[modal] gpu={gpu} num_gpus={num_gpus} feedback={feedback}  args={args}")
-    train.with_options(gpu=gpu).remote(args, num_gpus=num_gpus)
+    print(f"[modal] gpu={gpu} num_gpus={num_gpus} feedback={feedback} system={system} "
+          f"reward={reward_mode} save_steps={save_steps} splits={ojb_splits}  args={args}")
+    train.with_options(gpu=gpu).remote(args, num_gpus=num_gpus, ojb_splits=ojb_splits)
 
 
 # ---------------------------------------------------------------------------

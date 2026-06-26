@@ -6,7 +6,7 @@ has a self-contained report with embedded graphs.
 | Iteration | Summary | Report |
 |---|---|---|
 | **01 — easy-only SDPO** | Base has a real pass@k frontier (py 9.5→20%); 20 steps = null; **100 steps = global regression** (overfit/collapse to terse outputs, GSM8K 90.8→87.3%). pass@k caught what greedy pass@1 + the loss hid. | [reports/iteration-01/REPORT.md](../reports/iteration-01/REPORT.md) |
-| 02 — frontier-band + regularized | *(planned)* train the learnability frontier (easy + sometimes-solvable medium), lower LR / fewer epochs / KL anchor, early-stop on held-out pass@k. | — |
+| **02 — live judge feedback** | *(planned)* centerpiece: per-rollout judge text → SDPO teacher (vs copy-only), to fix the iteration-01 collapse. Python-only prototype, full OJBench (filtered diff-checkable), learnability-frontier data, LR 3e-5, length-driven early-stop, feedback-OFF control. | [reports/iteration-02/REPORT.md](../reports/iteration-02/REPORT.md) |
 
 **Standing lessons (carry forward):**
 - **pass@k (k≥4, n≥8) is the metric** — greedy pass@1 (±2/25 noise) and the SDPO loss are both blind to regression.

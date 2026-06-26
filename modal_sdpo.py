@@ -119,7 +119,9 @@ def main(
     num_generations: int = 8,
     max_completion_length: int = 8192,
     max_steps: int = 20,
-    vllm_gpu_util: float = 0.45,  # dedicated GPU -> more headroom than the GB10's 0.30
+    # H100 is 80 GB (< GB10's 128 GB unified): keep vLLM's KV reservation small so
+    # the policy + EMA teacher + 8k-token LM-head logits fit. 0.25 ~= 20 GB for vLLM.
+    vllm_gpu_util: float = 0.25,
 ):
     if smoke:
         args = ["--smoke", "--difficulties", "easy", "--languages", languages]

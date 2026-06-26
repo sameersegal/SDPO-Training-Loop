@@ -88,6 +88,44 @@ def public_private_cases(pid, public_frac=0.5, seed=0):
     return pub, prv
 
 
+# --- worked-example hint: fill an EMPTY "### Example" section -----------------
+# ~17% of NOI problems have an Example header but no content. Injecting the
+# smallest PUBLIC case as a worked example is format grounding (low risk: one
+# small case is not a lookup table; private cases still require a real solution).
+_EXAMPLE_RE = re.compile(r"(#+[ \t]*Examples?\b[^\n]*\n)(.*?)(?=\n#+[ \t]|\Z)", re.DOTALL | re.IGNORECASE)
+
+
+def example_section_is_empty(prompt):
+    m = _EXAMPLE_RE.search(prompt)
+    return bool(m) and m.group(2).strip() == ""
+
+
+def inject_example(prompt, input_text, output_text):
+    """Fill an empty Example section with one worked (input, output) case. No-op if
+    there is no empty Example header. Uses re.sub with a function (no str.format),
+    so braces/% in the case content are safe."""
+    block = f"\nInput:\n```\n{input_text.rstrip()}\n```\n\nOutput:\n```\n{output_text.rstrip()}\n```\n"
+    if not example_section_is_empty(prompt):
+        return prompt
+    return _EXAMPLE_RE.sub(lambda m: m.group(1) + block, prompt, count=1)
+
+
+def augment_prompt_with_example(prompt, pid, language="python", which="public", max_input_bytes=400):
+    """If the Example section is empty, inject the SMALLEST public case as a worked
+    example. No-op otherwise, or if even the smallest case is too large to be a hint.
+    Only PUBLIC cases are leaked."""
+    if not example_section_is_empty(prompt):
+        return prompt
+    pub, prv = public_private_cases(pid)
+    cases = pub if which == "public" else prv
+    smallest = min(cases, key=lambda c: c[0].stat().st_size)
+    if smallest[0].stat().st_size > max_input_bytes:
+        return prompt
+    inp = smallest[0].read_text(encoding="utf-8", errors="replace")
+    out = smallest[1].read_text(encoding="utf-8", errors="replace")
+    return inject_example(prompt, inp, out)
+
+
 def judge_completion(text, pid, which="public", timeout=6.0, language="python"):
     """Returns (reward, verdict, feedback_text).
     reward = fraction of cases passed (dense); verdict in AC/WA/RE/TLE/CE/NO_CODE."""

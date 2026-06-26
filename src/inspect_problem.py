@@ -23,18 +23,22 @@ def main():
     ap.add_argument("--language", default="python", choices=["python", "cpp"])
     ap.add_argument("--which", default="public", choices=["public", "private"])
     ap.add_argument("--solution", default=None, help="path to a candidate solution (else a wrong stub)")
+    ap.add_argument("--hint", action="store_true", help="inject smallest public case into an empty Example section")
     args = ap.parse_args()
     pid = args.pid
 
     pmap = S.CPP_PROMPT_BY_ID if args.language == "cpp" else S.PROMPT_BY_ID
     prompt = pmap[pid]
+    empty_ex = S.example_section_is_empty(prompt)
+    if args.hint:
+        prompt = S.augment_prompt_with_example(prompt, pid, language=args.language)
     pub, prv = S.public_private_cases(pid)
     cases = pub if args.which == "public" else prv
     cases_sorted = sorted(cases, key=lambda c: c[0].stat().st_size)
 
     print("=" * 78)
     print(f"loj-{pid}  difficulty={S.DIFF_BY_ID[pid]}  language={args.language}  "
-          f"public/private = {len(pub)}/{len(prv)} cases")
+          f"public/private = {len(pub)}/{len(prv)} cases  empty_example={empty_ex}  hint={'on' if args.hint else 'off'}")
 
     print("\n----- TASK PROMPT (what the model sees) -----")
     print(clip(prompt, 1200))

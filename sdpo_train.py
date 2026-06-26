@@ -94,8 +94,14 @@ def main():
         vllm_gpu_memory_utilization=args.vllm_gpu_util,
         # --- optim ---
         learning_rate=args.lr,
-        per_device_train_batch_size=args.num_generations,
-        gradient_accumulation_steps=2,
+        # Microbatch of 1 completion keeps the LM-head logits tensor
+        # [bs*seq*vocab] small enough to fit alongside colocate vLLM on the
+        # single GB10 GPU (bs=num_generations OOMs at step 0). Effective batch
+        # is preserved at num_generations via gradient accumulation.
+        per_device_train_batch_size=1,
+        gradient_accumulation_steps=2 * args.num_generations,
+        gradient_checkpointing=True,
+        gradient_checkpointing_kwargs={"use_reentrant": False},
         max_steps=args.max_steps,
         logging_steps=1,
         save_strategy="no",

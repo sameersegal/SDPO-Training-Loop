@@ -129,6 +129,22 @@ def train(args: list[str], num_gpus: int = 1, ojb_splits: str = "ojb_splits_full
     print(f"[modal] ojbench test-case dirs visible: {n}", flush=True)
     assert n > 0, f"{noi} is empty — run `modal volume put ojbench-data ...` first"
 
+    # Preflight EVERY split problem's testdir BEFORE training — a missing dir otherwise
+    # crashes mid-step-2 after minutes of generation (an ICPC dir missing did exactly
+    # that). Fail fast with the full list instead.
+    import json as _json
+    _split = _json.load(open(f"/root/app/{ojb_splits}"))
+    _missing = []
+    for _pid, _td in _split.get("testdir_by_id", {}).items():
+        if not os.path.exists(f"/root/app/ojbench_data/{_td}/init.yml"):
+            _missing.append(_td)
+    if _missing:
+        raise RuntimeError(
+            f"{len(_missing)} split testdirs missing from the volume "
+            f"(e.g. {_missing[:5]}). Sync them: modal volume put ojbench-data <local> /<part>")
+    print(f"[modal] preflight: all {len(_split.get('testdir_by_id', {}))} split testdirs present",
+          flush=True)
+
     if num_gpus > 1:
         # Data-parallel: each process owns one GPU, runs its own colocate vLLM
         # and generates a shard of the rollouts. ~N x generation throughput.

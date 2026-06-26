@@ -63,7 +63,9 @@ Base `gemma-4-E2B-it` pass@k on the held-out set (n=8 samples, temp 0.8, Modal H
 - **Training infra worked fine**: 100 steps, ~**45 s/step** on H100 (~4× the GB10), healthy `success_group_fraction`. The problem is the *recipe* (data breadth + steps/LR), not the pipeline.
 
 ## Slide 5 — Methodology insight (a strong "how we did it right" slide)
+**Graph:** `slides/loss_curve.png`
 - **pass@k > greedy pass@1.** Greedy wobbles ±2/25 (batch nondeterminism); pass@k is clean & monotonic and *is* the metric SDPO exploits.
+- **The loss is NOT a quality signal.** SDPO distillation loss stayed flat (~0.15, mean over 100 steps; 6 degenerate loss=0 steps) *while the model regressed*. Both the loss and greedy pass@1 looked fine — only **pass@k** exposed the collapse. Don't trust the loss curve; trust pass@k.
 - **Select training data by *measured solvability*, not difficulty label.** Greedy showed medium 0/5, but pass@8 medium = **40%** — medium *is* trainable; it was the metric hiding the signal. The SDPO-coherent training set is the **frontier band** (problems solved sometimes-but-not-always), refreshed as the model improves (moving curriculum).
 
 ## Slide 6 — Infra / "why Modal" (honest engineering)

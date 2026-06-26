@@ -45,3 +45,4 @@ reports/comparison/figures/
 .pytest_cache/
 prompt_opt_results.json
 icpc_download.log
+adapter_it02/

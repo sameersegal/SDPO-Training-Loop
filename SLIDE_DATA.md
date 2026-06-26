@@ -58,7 +58,7 @@ Base `gemma-4-E2B-it` pass@k on the held-out set (n=8 samples, temp 0.8, Modal H
 **Talking points:**
 - 100 steps **regressed across every cell** — easy down, **medium frontier collapsed (40% → 0%)**, overall pass@8 halved. Not noise: n=8, medium = 0/40 attempts.
 - **Cause: overfitting / mode-collapse toward terse outputs.** 100 steps over only **30 easy rows** (~50 epochs) at LR 1e-4. Training completion length **fell ~3–4×** (mean ~3,500 → ~900 tokens) — the model converged to short, narrow solutions that fit the easy training set but don't generalize.
-- **Regression is GLOBAL, not just coding:** GSM8K also dropped (~88% vs base 90.8%) — capability loss, not coding-specific forgetting.
+- **Regression is GLOBAL, not just coding:** GSM8K dropped **90.8% → 87.3% (−3.6 pt)** — real capability loss, not coding-specific forgetting. (Eval-time length confirms the terseness: GSM8K mean completion 433 → 373 tokens, truncations 29 → 1.)
 - **The arc:** base shows a real frontier (Slide 1) → 20 steps = null → 100 steps = regression. **More training on a narrow easy-only set hurts.**
 - **Training infra worked fine**: 100 steps, ~**45 s/step** on H100 (~4× the GB10), healthy `success_group_fraction`. The problem is the *recipe* (data breadth + steps/LR), not the pipeline.
 

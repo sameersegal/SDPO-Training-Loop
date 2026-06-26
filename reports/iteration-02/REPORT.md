@@ -85,6 +85,27 @@ harder problems. We expect feedback-ON to beat feedback-OFF on the same data/rec
 
 ---
 
+## Prompt optimization (preliminary, base gemma — `src/prompt_opt.py`)
+7 train problems × 4 prompt variants, n=4, temp 0.6, judged on private cases:
+
+| variant | pass@1 | what it adds |
+|---|---|---|
+| base | 0.464 | the prompt as-is |
+| +expert system msg | 0.500 | "expert competitive programmer; reason about complexity, then solve" |
+| +worked-example hint | 0.536 | smallest public case injected into an empty Example section |
+| **hint + expert** | **0.571** | both (best) |
+
+**Insights:**
+- **Prompts only move the *frontier*.** 3 easy problems were 4/4 for every variant (ceiling); 3 medium
+  were 0/4 for every variant (floor — TLE/RE from a wrong algorithm, which a prompt can't fix). The
+  entire effect came from **one frontier problem (loj-2608): base 1/4 → expert 2/4 → hint 3/4 →
+  hint+expert 4/4** — a clean monotonic lift.
+- **The worked-example hint is the strongest single lever** (+0.07), the expert system prompt helps
+  (+0.036), and **they stack** (+0.11 ≈ +23% relative). Use **hint + expert system prompt** as the
+  iteration-02 default — applied consistently to base and treatment (it's prompt-eng, orthogonal to feedback).
+- Caveat: tiny sample, effect driven by one problem → confirm at scale. Floors are *capability* limits
+  (the live-feedback/curriculum levers), not prompt limits.
+
 ## Results (TBD — populate after the runs)
 - pass@k: base vs feedback-OFF vs feedback-ON — *table + `figures/compare_*.png`*
 - GSM8K regression — *TBD*

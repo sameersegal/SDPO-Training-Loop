@@ -20,10 +20,21 @@ RUN:
 GET THE ADAPTER BACK:
   modal volume get sdpo-outputs /sdpo_out ./sdpo_out_modal
 """
+from pathlib import Path
+
 import modal
 
 APP_NAME = "sdpo-gemma-ojbench"
 PYTHON_VERSION = "3.12"
+
+SRC = Path(__file__).resolve().parent           # repo/src
+REPO = SRC.parent                                # repo root
+DATA = REPO / "data"
+# Code + judge ship to a FLAT /root/app layout (data via Volume), so absolute
+# local paths keep `modal run src/modal_sdpo.py` working from any CWD.
+_CODE = ["_paths.py", "ojbench_eval.py", "sdpo_ojbench.py", "sdpo_train.py",
+         "sdpo_passk.py", "sdpo_eval_vllm.py", "eval_runner.py"]
+_DATA = ["ojb_splits.json", "ojbench_selected.json"]
 
 # CUDA *devel* base: flashinfer JIT-compiles kernels at runtime and needs nvcc.
 # Versions pinned to match the validated GB10 venv exactly.
@@ -52,16 +63,13 @@ image = (
             "HF_HUB_ENABLE_HF_TRANSFER": "0",
         }
     )
-    # Ship the training + judge code (data lives in a Volume, not the image).
-    .add_local_file("ojbench_eval.py", "/root/app/ojbench_eval.py")
-    .add_local_file("sdpo_ojbench.py", "/root/app/sdpo_ojbench.py")
-    .add_local_file("sdpo_train.py", "/root/app/sdpo_train.py")
-    .add_local_file("sdpo_passk.py", "/root/app/sdpo_passk.py")
-    .add_local_file("sdpo_eval_vllm.py", "/root/app/sdpo_eval_vllm.py")
-    .add_local_file("eval_runner.py", "/root/app/eval_runner.py")
-    .add_local_file("ojb_splits.json", "/root/app/ojb_splits.json")
-    .add_local_file("ojbench_selected.json", "/root/app/ojbench_selected.json")
 )
+# Ship the training + judge code + committed data into the flat /root/app layout
+# (OJBench test cases come from a Volume, not the image).
+for _f in _CODE:
+    image = image.add_local_file(str(SRC / _f), f"/root/app/{_f}")
+for _f in _DATA:
+    image = image.add_local_file(str(DATA / _f), f"/root/app/{_f}")
 
 app = modal.App(APP_NAME)
 

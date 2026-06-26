@@ -2,7 +2,7 @@
 
 Port of the SDPO training loop to a fast cloud GPU. The GB10 is memory-bandwidth-bound
 (~270 GB/s); an H100/H200 (~3.3 TB/s, ~12×) runs this generation-bound loop several × faster
-and frees the local box. `sdpo_train.py` / `sdpo_ojbench.py` are reused verbatim — `modal_sdpo.py`
+and frees the local box. `src/sdpo_train.py` / `src/sdpo_ojbench.py` are reused verbatim — `src/modal_sdpo.py`
 only reproduces the environment.
 
 ## One-time setup
@@ -28,14 +28,14 @@ All commands use the venv's CLI: `.venv/bin/modal` (or activate the venv first).
 ```bash
 # Smoke test first — 2 steps, validates image + data + judge end-to-end (~5-10 min,
 # most of which is the one-time gemma-4 download into the hf-cache volume).
-.venv/bin/modal run modal_sdpo.py --smoke
+.venv/bin/modal run src/modal_sdpo.py --smoke
 
 # Real run — the scaled experiment the GB10 can't do quickly
-.venv/bin/modal run modal_sdpo.py --difficulties easy --max-steps 200
-.venv/bin/modal run modal_sdpo.py --gpu H200 --difficulties easy --max-steps 500
+.venv/bin/modal run src/modal_sdpo.py --difficulties easy --max-steps 200
+.venv/bin/modal run src/modal_sdpo.py --gpu H200 --difficulties easy --max-steps 500
 ```
 
-Flags (see `main()` in `modal_sdpo.py`): `--gpu` (H100/H200/A100-80GB), `--difficulties`,
+Flags (see `main()` in `src/modal_sdpo.py`): `--gpu` (H100/H200/A100-80GB), `--difficulties`,
 `--languages`, `--num-generations`, `--max-completion-length`, `--max-steps`, `--vllm-gpu-util`.
 
 ## Get the trained adapter back

@@ -1,11 +1,11 @@
 # FINDINGS — Results index
 
-Results are tracked **iteration by iteration** under [`reports/`](./reports/). Each iteration
+Results are tracked **iteration by iteration** under [`reports/`](../reports/). Each iteration
 has a self-contained report with embedded graphs.
 
 | Iteration | Summary | Report |
 |---|---|---|
-| **01 — easy-only SDPO** | Base has a real pass@k frontier (py 9.5→20%); 20 steps = null; **100 steps = global regression** (overfit/collapse to terse outputs, GSM8K 90.8→87.3%). pass@k caught what greedy pass@1 + the loss hid. | [reports/iteration-01/REPORT.md](./reports/iteration-01/REPORT.md) |
+| **01 — easy-only SDPO** | Base has a real pass@k frontier (py 9.5→20%); 20 steps = null; **100 steps = global regression** (overfit/collapse to terse outputs, GSM8K 90.8→87.3%). pass@k caught what greedy pass@1 + the loss hid. | [reports/iteration-01/REPORT.md](../reports/iteration-01/REPORT.md) |
 | 02 — frontier-band + regularized | *(planned)* train the learnability frontier (easy + sometimes-solvable medium), lower LR / fewer epochs / KL anchor, early-stop on held-out pass@k. | — |
 
 **Standing lessons (carry forward):**

@@ -2,6 +2,10 @@
 .env
 *.key
 
+# per-iteration run outputs (adapters, logs, raw eval JSONs) — keep the convention doc
+runs/*
+!runs/README.md
+
 # python env / caches
 .venv/
 __pycache__/

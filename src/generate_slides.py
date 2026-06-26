@@ -12,7 +12,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-ROOT = Path(__file__).parent
+from _paths import repo_root
+
+ROOT = repo_root()
 # Figures are tracked per iteration under reports/<ITER>/figures so progress is
 # diffable iteration-by-iteration. Bump ITER for the next run.
 ITER = os.environ.get("ITER", "iteration-01")

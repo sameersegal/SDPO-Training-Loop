@@ -18,7 +18,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from sdpo_ojbench import (SPLITS, PROMPT_BY_ID, CPP_PROMPT_BY_ID, DIFF_BY_ID,
                           judge_completion)
 
-ROOT = Path(__file__).parent
+ROOT = Path.cwd()  # outputs land in the CWD
 
 
 def generate(model, tok, prompt, max_new_tokens):

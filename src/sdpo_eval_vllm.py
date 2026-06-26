@@ -15,17 +15,10 @@ from openai import OpenAI
 
 from sdpo_ojbench import (SPLITS, PROMPT_BY_ID, CPP_PROMPT_BY_ID, DIFF_BY_ID,
                           judge_completion)
+from _paths import load_env
 
-ROOT = Path(__file__).parent
-
-# load .env (WANDB_API_KEY) so eval metrics can be pushed to wandb
-_envf = ROOT / ".env"
-if _envf.exists():
-    for _line in _envf.read_text().splitlines():
-        _line = _line.strip()
-        if _line and not _line.startswith("#") and "=" in _line:
-            _k, _v = _line.split("=", 1)
-            os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
+ROOT = Path.cwd()  # outputs land in the CWD (run from runs/iteration-XX/)
+load_env()  # WANDB_API_KEY etc. from repo-root .env (no-op in Modal)
 
 
 def main():

@@ -136,29 +136,33 @@ effect.** Use pass@k / a larger held-out slice for a discriminative metric.
 
 ## 9. Pipeline / scripts (reproducible)
 
+Code is in `src/`, committed inputs in `data/`, results in `reports/`. (Repo layout: `README.md`.)
+
 | File | Role |
 |---|---|
-| `ojb_splits.json` | train/held-out split + py & cpp prompts |
-| `sdpo_ojbench.py` | env adapter: prompts, public/private split, reward func, py+cpp judging |
-| `ojbench_eval.py` | base judging primitives (extract code, run tests) |
-| `sdpo_train.py` | SDPO training (TRL `SDPOTrainer` + LoRA + vLLM colocate) |
-| `sdpo_eval_vllm.py` | held-out pass@1 by language via a vLLM endpoint (+W&B) |
-| `eval_runner.py` | GSM8K eval (regression probe) |
-| `modal_sdpo.py` | run training on Modal H100/H200 (see `MODAL.md`) |
+| `data/ojb_splits.json` | train/held-out split + py & cpp prompts |
+| `src/sdpo_ojbench.py` | env adapter: prompts, public/private split, reward func, py+cpp judging |
+| `src/ojbench_eval.py` | base judging primitives (extract code, run tests) |
+| `src/sdpo_train.py` | SDPO training (TRL `SDPOTrainer` + LoRA + vLLM colocate) |
+| `src/sdpo_eval_vllm.py` | held-out pass@1 by language via a vLLM endpoint (+W&B) |
+| `src/sdpo_passk.py` | held-out pass@k (the discriminative metric) |
+| `src/eval_runner.py` | GSM8K eval (regression probe) |
+| `src/modal_sdpo.py` | run training + eval on Modal H100/H200 (see `MODAL.md`) |
 
-**Run order (local GB10):**
+**Run order (local GB10).** Run from `runs/iteration-NN/` so outputs stay per-iteration; scripts
+are in `src/` (put it on the path). `S=../../src`:
 ```bash
 # 1. baseline held-out + GSM8K (serve base):
-python sdpo_eval_vllm.py --served-model google/gemma-4-E2B-it --tag base --max-tokens 32768 --wandb
-python eval_runner.py --dataset gsm8k --sample-frac 1.0 --out results_gsm8k_base_full.json
+PYTHONPATH=$S python $S/sdpo_eval_vllm.py --served-model google/gemma-4-E2B-it --tag base --max-tokens 32768 --wandb
+PYTHONPATH=$S python $S/eval_runner.py --dataset gsm8k --sample-frac 1.0 --out results_gsm8k_base_full.json
 # 2. train easy-only (free the GPU first):
-python sdpo_train.py --difficulties easy --languages python,cpp --max-steps 20 \
+PYTHONPATH=$S python $S/sdpo_train.py --difficulties easy --languages python,cpp --max-steps 20 \
   --vllm-gpu-util 0.30 --output-dir sdpo_out
 # 3. serve adapter via --enable-lora, then re-eval + GSM8K (see §8):
-python sdpo_eval_vllm.py --served-model sdpo --tag sdpo --max-tokens 32768 --wandb
-python eval_runner.py --dataset gsm8k --sample-frac 1.0 --model sdpo --out results_gsm8k_sdpo_full.json
+PYTHONPATH=$S python $S/sdpo_passk.py --served-model sdpo --tag sdpo --wandb
+PYTHONPATH=$S python $S/eval_runner.py --dataset gsm8k --sample-frac 1.0 --model sdpo --out results_gsm8k_sdpo_full.json
 ```
-**Cloud (faster):** `modal run modal_sdpo.py --difficulties easy --max-steps 100` — see `MODAL.md`.
+**Cloud (faster, from repo root):** `modal run src/modal_sdpo.py --difficulties easy --max-steps 100` — see `MODAL.md`.
 
 ## 10. Status (what actually ran)
 

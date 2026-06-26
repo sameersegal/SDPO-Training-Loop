@@ -28,12 +28,16 @@ import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+import tempfile
+
 import yaml
 from openai import OpenAI
 
-ROOT = Path(__file__).parent
-DATA = ROOT / "ojbench_data" / "NOI"
-SELECTED = json.load(open(ROOT / "ojbench_selected.json"))
+from _paths import find_file, ojbench_dir
+
+ROOT = Path(tempfile.gettempdir())  # scratch dir for transient _sol_* artifacts
+DATA = ojbench_dir() / "NOI"
+SELECTED = json.load(open(find_file("ojbench_selected.json")))
 
 # --------------------------------------------------------------------------
 # Generation

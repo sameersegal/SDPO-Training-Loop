@@ -20,10 +20,13 @@ import subprocess
 import time
 from pathlib import Path
 
-from ojbench_eval import extract_code, extract_tests, judge_solution, normalize, _clip, _limit
+import tempfile
 
-ROOT = Path(__file__).parent
-SPLITS = json.load(open(ROOT / "ojb_splits.json"))
+from ojbench_eval import extract_code, extract_tests, judge_solution, normalize, _clip, _limit
+from _paths import find_file
+
+ROOT = Path(tempfile.gettempdir())  # scratch dir for transient _cpp_* compile artifacts
+SPLITS = json.load(open(find_file("ojb_splits.json")))
 PROMPT_BY_ID = {int(k): v for k, v in SPLITS["py_prompt_by_id"].items()}
 CPP_PROMPT_BY_ID = {int(k): v for k, v in SPLITS["cpp_prompt_by_id"].items()}
 DIFF_BY_ID = {int(k): v for k, v in SPLITS["by_id"].items()}

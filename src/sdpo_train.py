@@ -13,18 +13,9 @@ Full run:
 import argparse
 import os
 
-# load WANDB_API_KEY (and anything else) from .env
-from pathlib import Path
+from _paths import load_env
 
-ROOT = Path(__file__).parent
-envf = ROOT / ".env"
-if envf.exists():
-    for line in envf.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            k, v = line.split("=", 1)
-            os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
-
+load_env()  # WANDB_API_KEY etc. from repo-root .env (no-op in Modal; uses Secrets)
 os.environ.setdefault("TRL_EXPERIMENTAL_SILENCE", "1")
 
 from peft import LoraConfig  # noqa: E402

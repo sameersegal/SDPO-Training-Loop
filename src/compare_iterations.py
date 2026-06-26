@@ -16,7 +16,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-ROOT = Path(__file__).parent
+from _paths import repo_root
+
+ROOT = repo_root()
 REPORTS = ROOT / "reports"
 OUT = REPORTS / "comparison" / "figures"
 OUT.mkdir(parents=True, exist_ok=True)

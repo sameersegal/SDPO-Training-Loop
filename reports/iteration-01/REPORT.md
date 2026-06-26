@@ -99,4 +99,4 @@ SDPO loss = top-100-logit KL between the policy on its own attempt and a feedbac
 - **Artifacts, W&B run IDs, and the preserved adapter:** [`PROVENANCE.md`](./PROVENANCE.md).
 - Curated data: [`data/`](./data/) (per-step metrics CSVs + eval summaries).
 - Figures: `python generate_slides.py` (reads `figures/passk_*.json`, training logs).
-- Design: [`../../EXPERIMENT.md`](../../EXPERIMENT.md) · Results index: [`../../FINDINGS.md`](../../FINDINGS.md) · Cloud: [`../../MODAL.md`](../../MODAL.md)
+- Design: [`docs/EXPERIMENT.md`](../../docs/EXPERIMENT.md) · Results index: [`docs/FINDINGS.md`](../../docs/FINDINGS.md) · Cloud: [`docs/MODAL.md`](../../docs/MODAL.md)

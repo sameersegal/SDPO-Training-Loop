@@ -56,6 +56,9 @@ image = (
     .add_local_file("ojbench_eval.py", "/root/app/ojbench_eval.py")
     .add_local_file("sdpo_ojbench.py", "/root/app/sdpo_ojbench.py")
     .add_local_file("sdpo_train.py", "/root/app/sdpo_train.py")
+    .add_local_file("sdpo_passk.py", "/root/app/sdpo_passk.py")
+    .add_local_file("sdpo_eval_vllm.py", "/root/app/sdpo_eval_vllm.py")
+    .add_local_file("eval_runner.py", "/root/app/eval_runner.py")
     .add_local_file("ojb_splits.json", "/root/app/ojb_splits.json")
     .add_local_file("ojbench_selected.json", "/root/app/ojbench_selected.json")
 )
@@ -167,3 +170,150 @@ def main(
             args.append("--no-grad-checkpointing")
     print(f"[modal] gpu={gpu} num_gpus={num_gpus}  args={args}")
     train.with_options(gpu=gpu).remote(args, num_gpus=num_gpus)
+
+
+# ---------------------------------------------------------------------------
+# Evaluation: serve vLLM in-container, run pass@k + held-out pass@1 + GSM8K.
+# ---------------------------------------------------------------------------
+@app.function(
+    image=image,
+    gpu="H100",
+    volumes=VOLUMES,
+    secrets=[modal.Secret.from_name("huggingface"), modal.Secret.from_name("wandb")],
+    timeout=2 * 60 * 60,
+)
+def evaluate(which: str):
+    """which in {"base","sdpo"}. Serves the model, runs the eval suite, returns
+    the result JSONs as a dict."""
+    import json
+    import os
+    import subprocess
+    import time
+    import urllib.request
+
+    os.chdir("/root/app")
+    os.environ.setdefault("WANDB_PROJECT", APP_NAME)
+    base = "google/gemma-4-E2B-it"
+    serve = ["vllm", "serve", base, "--port", "8000", "--dtype", "bfloat16",
+             "--max-model-len", "36864", "--gpu-memory-utilization", "0.85",
+             "--max-num-seqs", "32"]
+    if which == "sdpo":
+        serve += ["--enable-lora", "--lora-modules", "sdpo=/root/app/sdpo_out",
+                  "--max-lora-rank", "32"]
+        served, tag = "sdpo", "sdpo100"
+    else:
+        served, tag = base, "base_modal"
+
+    print(f"[eval:{which}] starting server: {' '.join(serve)}", flush=True)
+    srv = subprocess.Popen(serve)
+    ready = False
+    for _ in range(180):  # up to 15 min for startup
+        try:
+            urllib.request.urlopen("http://localhost:8000/v1/models", timeout=2)
+            ready = True
+            break
+        except Exception:
+            if srv.poll() is not None:
+                raise RuntimeError("vLLM server exited during startup")
+            time.sleep(5)
+    if not ready:
+        raise RuntimeError("vLLM server did not become ready")
+    print(f"[eval:{which}] server ready; running evals", flush=True)
+
+    try:
+        # pass@k (headline) first, then the slower 32k held-out, then GSM8K.
+        subprocess.run(["python", "sdpo_passk.py", "--served-model", served,
+                        "--tag", tag, "--n", "8", "--ks", "1,2,4,8",
+                        "--max-tokens", "8192", "--temperature", "0.8",
+                        "--concurrency", "16", "--wandb"], check=True)
+        subprocess.run(["python", "sdpo_eval_vllm.py", "--served-model", served,
+                        "--tag", tag, "--max-tokens", "32768", "--wandb"], check=True)
+        subprocess.run(["python", "eval_runner.py", "--dataset", "gsm8k",
+                        "--sample-frac", "1.0", "--model", served,
+                        "--out", f"results_gsm8k_{tag}.json"], check=True)
+    finally:
+        srv.terminate()
+
+    out = {}
+    for f in [f"sdpo_passk_{tag}.json", f"sdpo_eval_{tag}.json",
+              f"results_gsm8k_{tag}.json"]:
+        if os.path.exists(f):
+            out[f] = json.load(open(f))
+    print(f"[eval:{which}] done — {list(out)}", flush=True)
+    return out
+
+
+@app.function(
+    image=image,
+    gpu="H100",
+    volumes=VOLUMES,
+    secrets=[modal.Secret.from_name("huggingface"), modal.Secret.from_name("wandb")],
+    timeout=60 * 60,
+)
+def passk_one(which: str, languages: str = "python,cpp"):
+    """pass@k only (returns as soon as it finishes — no slow held-out/gsm8k tail)."""
+    import json
+    import os
+    import subprocess
+    import time
+    import urllib.request
+
+    os.chdir("/root/app")
+    os.environ.setdefault("WANDB_PROJECT", APP_NAME)
+    base = "google/gemma-4-E2B-it"
+    serve = ["vllm", "serve", base, "--port", "8000", "--dtype", "bfloat16",
+             "--max-model-len", "16384", "--gpu-memory-utilization", "0.85",
+             "--max-num-seqs", "32"]
+    if which == "sdpo":
+        serve += ["--enable-lora", "--lora-modules", "sdpo=/root/app/sdpo_out",
+                  "--max-lora-rank", "32"]
+        served, tag = "sdpo", "sdpo100"
+    else:
+        served, tag = base, "base_modal"
+
+    srv = subprocess.Popen(serve)
+    for _ in range(180):
+        try:
+            urllib.request.urlopen("http://localhost:8000/v1/models", timeout=2)
+            break
+        except Exception:
+            if srv.poll() is not None:
+                raise RuntimeError("vLLM exited during startup")
+            time.sleep(5)
+    try:
+        subprocess.run(["python", "sdpo_passk.py", "--served-model", served,
+                        "--tag", tag, "--n", "8", "--ks", "1,2,4,8",
+                        "--max-tokens", "8192", "--temperature", "0.8",
+                        "--languages", languages, "--concurrency", "16",
+                        "--wandb"], check=True)
+    finally:
+        srv.terminate()
+    return json.load(open(f"sdpo_passk_{tag}.json"))
+
+
+@app.local_entrypoint()
+def passk_run(which: str = "sdpo", languages: str = "python", out: str = ""):
+    import json
+    res = passk_one.remote(which, languages)
+    fname = out or f"sdpo_passk_{which}_{languages.replace(',', '_')}.json"
+    with open(fname, "w") as f:
+        json.dump(res, f, indent=2)
+    print(f"[modal] wrote {fname}")
+    print(json.dumps(res["summary"], indent=2))
+
+
+@app.local_entrypoint()
+def run_eval():
+    """Run base + 100-step adapter eval suites in parallel on two H100s."""
+    import json
+
+    print("[modal] spawning base + sdpo eval (parallel)...")
+    base_call = evaluate.spawn("base")
+    sdpo_call = evaluate.spawn("sdpo")
+    results = {"base": base_call.get(), "sdpo": sdpo_call.get()}
+    for _which, res in results.items():
+        for fname, content in res.items():
+            with open(fname, "w") as f:
+                json.dump(content, f, indent=2)
+            print(f"  wrote {fname}")
+    print("[modal] eval complete — see sdpo_passk_*.json, sdpo_eval_*.json, results_gsm8k_*.json")

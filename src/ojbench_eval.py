@@ -21,14 +21,22 @@ import json
 import os
 import re
 import resource
+import shutil
 import subprocess
 import sys
+import threading
 import time
 import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import tempfile
+
+# Serializes lazy test extraction. The reward function now judges a group's
+# completions concurrently (threads), so multiple threads can hit the SAME
+# problem's tests.zip at once — without this lock one thread sees a freshly
+# mkdir'd _extracted/ and reads a file another thread hasn't written yet.
+_EXTRACT_LOCK = threading.Lock()
 
 import yaml
 from openai import OpenAI
@@ -149,11 +157,25 @@ def extract_tests(pid):
     pdir = _TESTDIR_BY_ID.get(pid, DATA / f"loj-{pid}")
     init = yaml.safe_load(open(pdir / "init.yml"))
     ex = pdir / "_extracted"
-    if not ex.exists():
-        ex.mkdir()
-        with zipfile.ZipFile(pdir / init["archive"]) as z:
-            z.extractall(ex)
     cases = [(ex / c["in"], ex / c["out"]) for c in init["test_cases"]]
+
+    def complete():
+        return all(i.exists() and o.exists() for i, o in cases)
+
+    # Re-extract if missing OR incomplete (a partial _extracted/ can come from an
+    # interrupted run or a half-uploaded volume dir). Extract to a temp dir then
+    # atomically rename, so _extracted/ only ever appears fully populated — and
+    # serialize under a lock so concurrent judge threads don't race on it.
+    if not complete():
+        with _EXTRACT_LOCK:
+            if not complete():
+                tmp = pdir / f"_extracted.tmp.{os.getpid()}"
+                shutil.rmtree(tmp, ignore_errors=True)
+                tmp.mkdir(parents=True)
+                with zipfile.ZipFile(pdir / init["archive"]) as z:
+                    z.extractall(tmp)
+                shutil.rmtree(ex, ignore_errors=True)
+                os.replace(tmp, ex)  # atomic: _extracted appears only when complete
     return cases
 
 

@@ -5,7 +5,7 @@
 ## TL;DR — a three-act story
 1. **The opportunity is real.** Base `gemma-4-E2B-it` has a large **pass@k frontier** on held-out: Python pass@1 9.5% → **pass@8 20%** (easy 32.5→60, medium 15→40, hard 0). That pass@1→pass@8 gap is exactly what SDPO's successful-rollout distillation targets.
 2. **20 steps = null.** Held-out greedy pass@1 base **3/25 → 3/25**; GSM8K **90.8% → 90.1%** (preserved). Within the ±2/25 noise floor — expected for a smoke-scale run. Pipeline fully validated.
-3. **100 steps = regression (overfitting).** Scaling to 100 easy-only steps **hurt** the model: pass@k easy 60→40, **medium 40→0 (collapsed)**, overall pass@8 **20→8**. ~50 epochs over 30 easy rows at LR 1e-4 → off-distribution drift (the adapter turned verbose). *More training on a too-narrow set is worse, not better.*
+3. **100 steps = regression (overfitting).** Scaling to 100 easy-only steps **hurt** the model: pass@k easy 60→40, **medium 40→0 (collapsed)**, overall pass@8 **20→8**, and **GSM8K fell too (~88% vs 90.8% — global, not coding-specific)**. ~50 epochs over 30 easy rows at LR 1e-4 → mode-collapse toward **terse** outputs (training completion length fell ~3–4×, ~3,500→~900 tokens). *More training on a too-narrow set is worse, not better.*
 
 **Methodology wins:** **pass@k revealed both the opportunity and the regression** that greedy pass@1 (3/25 either way) hid — it's the metric to standardize on. The eval was underpowered: the *same base model* scored 4/25 vs 2/25 across sessions (±2/25 greedy noise).
 
@@ -60,7 +60,7 @@ Graph: `slides/compare_python.png`.
 | medium pass@8 | 40% | **0%** |
 | overall pass@8 | 20% | **8%** |
 
-Regressed on every cell (n=8; medium = 0/40 attempts, not noise). **Cause: overfitting** — 100 steps over 30 easy rows (~50 epochs) at LR 1e-4; the adapter became verbose/off-distribution (also stalled the cpp judge). Training infra was healthy (45 s/step on H100, ~4× the GB10; `success_group_fraction` 0.5–1.0). The *recipe*, not the pipeline, is the problem. GSM8K-at-100-steps: *[running — global-forgetting vs coding-specific check]*.
+Regressed on every cell (n=8; medium = 0/40 attempts, not noise). **Cause: overfitting / mode-collapse toward terse outputs** — 100 steps over 30 easy rows (~50 epochs) at LR 1e-4; training completion length **fell ~3–4×** (mean ~3,500→~900 tokens), i.e. the model converged to short, narrow solutions, *not* verbose ones. The cpp-judge stall during eval was a separate issue (a pathological completion hangs the judge), not length. **The damage is global:** GSM8K also dropped (~88% vs base 90.8%). Training infra was healthy (45 s/step on H100, ~4× the GB10; `success_group_fraction` 0.5–1.0) — the *recipe*, not the pipeline, is the problem.
 
 ## Training dynamics (proof the loop learned on easy)
 - `success_group_fraction` = 1.0 or 0.5 nearly every step (vs **0** on easy+medium — the base solves no medium problems in 8 tries).
@@ -77,7 +77,7 @@ Ordered by expected payoff. The regression reframes priority #1 from "scale" to 
 
 1. **Fix the recipe before scaling steps (highest priority).**
    - **Frontier-band data, not easy-only.** Select training problems by *measured solvability* (base pass@8: easy 60%, **medium 40%**, hard 0) — include the medium problems that sometimes pass. Drop always-fail (no teacher) and always-solved (nothing to learn).
-   - **Regularize against drift:** fewer epochs, lower LR (try 2e-5–5e-5), and/or a KL-to-base anchor; cap completion length to curb the verbosity drift.
+   - **Regularize against collapse:** fewer epochs, lower LR (try 2e-5–5e-5), and/or a KL-to-base anchor to keep the policy near base and preserve output diversity (the model collapsed to terse, narrow solutions).
    - **Re-probe the frontier** every N steps (moving curriculum) and watch held-out pass@k as an early-stopping signal — stop before it regresses.
 2. **Standardize on pass@k** (k≥4, n≥8) as the eval metric; retire greedy pass@1. Enlarge the held-out slice for tighter estimates.
 3. **Live judge-text feedback (SDPO iteration 2).** Patch per-rollout judge text into the teacher reprompt — the path to non-zero on **hard / all-failed** groups (0 at every k today), and SDPO's main edge over GRPO.

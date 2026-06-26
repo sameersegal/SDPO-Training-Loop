@@ -46,7 +46,7 @@ Base `gemma-4-E2B-it` pass@k on the held-out set (n=8 samples, temp 0.8, Modal H
 - **No regression** on out-of-domain math (GSM8K preserved; the SDPO model was actually *more concise* — truncations 29 → 6).
 
 ## Slide 4 — Scaling to 100 steps: it OVERFIT (the key cautionary result)
-**Graph:** `slides/compare_python.png`
+**Graphs:** `slides/compare_python.png` (frontier regression), `slides/length_collapse.png` (response length over training)
 
 | pass@k (held-out, python) | base | **100-step** |
 |---|---|---|
@@ -57,10 +57,10 @@ Base `gemma-4-E2B-it` pass@k on the held-out set (n=8 samples, temp 0.8, Modal H
 
 **Talking points:**
 - 100 steps **regressed across every cell** — easy down, **medium frontier collapsed (40% → 0%)**, overall pass@8 halved. Not noise: n=8, medium = 0/40 attempts.
-- **Cause: overfitting / mode-collapse.** 100 steps over only **30 easy rows** (~50 epochs) at LR 1e-4. The adapter also turned *verbose* (longer completions, more truncation) — off-distribution drift.
+- **Cause: overfitting / mode-collapse toward terse outputs.** 100 steps over only **30 easy rows** (~50 epochs) at LR 1e-4. Training completion length **fell ~3–4×** (mean ~3,500 → ~900 tokens) — the model converged to short, narrow solutions that fit the easy training set but don't generalize.
+- **Regression is GLOBAL, not just coding:** GSM8K also dropped (~88% vs base 90.8%) — capability loss, not coding-specific forgetting.
 - **The arc:** base shows a real frontier (Slide 1) → 20 steps = null → 100 steps = regression. **More training on a narrow easy-only set hurts.**
 - **Training infra worked fine**: 100 steps, ~**45 s/step** on H100 (~4× the GB10), healthy `success_group_fraction`. The problem is the *recipe* (data breadth + steps/LR), not the pipeline.
-- GSM8K-at-100-steps *[running]* — tells us if the damage is global (forgetting) or coding-specific.
 
 ## Slide 5 — Methodology insight (a strong "how we did it right" slide)
 - **pass@k > greedy pass@1.** Greedy wobbles ±2/25 (batch nondeterminism); pass@k is clean & monotonic and *is* the metric SDPO exploits.

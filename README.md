@@ -8,7 +8,8 @@ GSM8K regression probe.
 | Doc | What it is |
 |---|---|
 | [`EXPERIMENT.md`](./EXPERIMENT.md) | **Design source of truth** — method, splits, configs, decisions, status |
-| [`FINDINGS.md`](./FINDINGS.md) | **Results** — 20-step run, deltas, the eval noise floor, next steps |
+| [`FINDINGS.md`](./FINDINGS.md) | **Results index** — links per-iteration reports in [`reports/`](./reports/); standing lessons |
+| [`reports/iteration-01/REPORT.md`](./reports/iteration-01/REPORT.md) | **Iteration 01** — self-contained report with embedded graphs (frontier → null → regression) |
 | [`MODAL.md`](./MODAL.md) | **Cloud scale-up** — run training on Modal H100/H200 |
 | [`HANDOFF.md`](./HANDOFF.md) | original next-steps handoff (executed — kept for history) |
 

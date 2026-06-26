@@ -13,8 +13,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 ROOT = Path(__file__).parent
-OUT = ROOT / "slides"
-OUT.mkdir(exist_ok=True)
+# Figures are tracked per iteration under reports/<ITER>/figures so progress is
+# diffable iteration-by-iteration. Bump ITER for the next run.
+ITER = os.environ.get("ITER", "iteration-01")
+OUT = ROOT / "reports" / ITER / "figures"
+OUT.mkdir(parents=True, exist_ok=True)
 KS = [1, 2, 4, 8]
 
 # Base model pass@k frontier (Modal H100, held-out, n=8, temp 0.8). Source of truth

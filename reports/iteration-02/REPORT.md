@@ -114,8 +114,14 @@ harder problems. We expect feedback-ON to beat feedback-OFF on the same data/rec
 **Mechanism validated.** `feedback_used_fraction` tracked the all-fail groups exactly (fires when
 `success_group_fraction=0`, off when a rollout succeeds) on GB10, Modal smoke, and the full run —
 vs **0** in iteration-01. So the judge feedback reaches the teacher and teaches the all-fail
-medium groups that iteration-01 left with no teacher. **Length did not collapse** (~4000 tokens,
-stable; iteration-01 went 3,500→900).
+medium groups that iteration-01 left with no teacher.
+
+![feedback fires on all-fail groups](./figures/feedback_mechanism.png)
+
+**Length did not collapse** (stayed ~3,600–5,300 tokens; iteration-01 collapsed 3,500→900) — the
+iteration-01 mode-collapse signature is gone. (Per-step data: [`data/train_metrics_run3.csv`](./data/train_metrics_run3.csv).)
+
+![no length collapse](./figures/length_stable.png)
 
 **Held-out pass@k (python) and GSM8K — three-way:**
 

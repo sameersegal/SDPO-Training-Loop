@@ -135,8 +135,18 @@ def _limit():
     resource.setrlimit(resource.RLIMIT_AS, (2 * 1024**3, 2 * 1024**3))
 
 
+# Optional registry id -> test-data dir (populated from a splits file's testdir_by_id).
+# Lets extract_tests resolve BOTH NOI (loj-<int>) and ICPC (string) problems. Falls back
+# to NOI/loj-<pid> when unset, so NOI-only splits work unchanged.
+_TESTDIR_BY_ID = {}
+
+
+def register_testdirs(mapping):
+    _TESTDIR_BY_ID.update(mapping)
+
+
 def extract_tests(pid):
-    pdir = DATA / f"loj-{pid}"
+    pdir = _TESTDIR_BY_ID.get(pid, DATA / f"loj-{pid}")
     init = yaml.safe_load(open(pdir / "init.yml"))
     ex = pdir / "_extracted"
     if not ex.exists():

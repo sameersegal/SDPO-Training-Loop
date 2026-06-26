@@ -22,11 +22,17 @@ from pathlib import Path
 
 import tempfile
 
-from ojbench_eval import extract_code, extract_tests, judge_solution, normalize, _clip, _limit
-from _paths import find_file
+from ojbench_eval import (extract_code, extract_tests, judge_solution, normalize,
+                          register_testdirs, _clip, _limit)
+from _paths import find_file, ojbench_dir
 
 ROOT = Path(tempfile.gettempdir())  # scratch dir for transient _cpp_* compile artifacts
-SPLITS = json.load(open(find_file("ojb_splits.json")))
+# OJB_SPLITS selects the dataset: "ojb_splits.json" (NOI-only, default) or
+# "ojb_splits_full.json" (NOI+ICPC, diff-checkable; built by build_splits_full.py).
+SPLITS = json.load(open(find_file(os.environ.get("OJB_SPLITS", "ojb_splits.json"))))
+# part-aware test-data resolution when the splits carry a registry (full dataset).
+if "testdir_by_id" in SPLITS:
+    register_testdirs({int(k): ojbench_dir() / v for k, v in SPLITS["testdir_by_id"].items()})
 PROMPT_BY_ID = {int(k): v for k, v in SPLITS["py_prompt_by_id"].items()}
 CPP_PROMPT_BY_ID = {int(k): v for k, v in SPLITS["cpp_prompt_by_id"].items()}
 DIFF_BY_ID = {int(k): v for k, v in SPLITS["by_id"].items()}

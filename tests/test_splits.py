@@ -26,6 +26,24 @@ def test_py_and_cpp_share_the_same_split():
     assert train_pids.isdisjoint(held_pids)
 
 
+def test_full_splits_invariants_if_present():
+    """If the combined NOI+ICPC splits exist, enforce the same invariants there."""
+    import json
+    from pathlib import Path
+    p = Path(__file__).resolve().parent.parent / "data" / "ojb_splits_full.json"
+    if not p.exists():
+        import pytest
+        pytest.skip("ojb_splits_full.json not built")
+    full = json.load(open(p))
+    tr, ho = set(full["train"]), set(full["heldout"])
+    assert tr.isdisjoint(ho)                                  # no leak
+    parts = full["part_by_id"]
+    assert {parts[str(i)] for i in ho} == {"NOI", "ICPC"}     # held-out spans both parts
+    for i in tr | ho:                                         # py & cpp present for every pid
+        assert str(i) in full["py_prompt_by_id"] and str(i) in full["cpp_prompt_by_id"]
+        assert str(i) in full["testdir_by_id"]
+
+
 def test_dataset_has_both_languages_per_pid_when_available():
     rows = S.build_dataset("train", languages=("python", "cpp"))
     by_pid = {}

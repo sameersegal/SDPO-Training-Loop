@@ -95,7 +95,7 @@ VOLUMES = {
         modal.Secret.from_name("huggingface"),  # -> HF_TOKEN (gated gemma-4)
         modal.Secret.from_name("wandb"),  # -> WANDB_API_KEY
     ],
-    timeout=6 * 60 * 60,
+    timeout=10 * 60 * 60,  # dense reward + feedback on the full 206-pool is slower per step
 )
 def train(args: list[str], num_gpus: int = 1, ojb_splits: str = "ojb_splits_full.json"):
     import os

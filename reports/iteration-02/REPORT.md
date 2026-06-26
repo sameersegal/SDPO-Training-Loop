@@ -47,8 +47,16 @@ harder problems. We expect feedback-ON to beat feedback-OFF on the same data/rec
    the early-warning for the collapse — watch it live, stop before damage.
 
 ## Experiment design
-- **De-risk spike first (~30 min):** pin the exact insertion point in `trl 1.6.0` experimental SDPO
-  for per-rollout feedback; validate the dataset filter (diff-checkable count by part × difficulty).
+- **De-risk spike — TRL interface DONE.** De-abstracted in [`src/sdpo_prompts.py`](../../src/sdpo_prompts.py),
+  validated byte-identical to the library by [`src/validate_sdpo_prompts.py`](../../src/validate_sdpo_prompts.py).
+  Findings: the teacher prompt is `reprompt_template = "{prompt}{solution}{feedback}\n\nCorrectly solve the
+  original question.\n"`, where `solution` = a successful group-mate rollout and `feedback` = judge text;
+  the teacher then sees this reprompt **+ the student's own completion**. **Injection point** =
+  `_prepare_training_batch` (`sdpo_trainer.py:878`, `feedbacks=privileged_contexts`); `feedbacks` is already
+  **per-rollout length**, so live feedback = subclass to pass per-completion judge text + set
+  `include_environment_feedback=True`. **Iteration-01 was "copy-only"** (`include_environment_feedback=False`
+  by default → feedback never used) — confirming the collapse mechanism. *Still to do: validate the dataset
+  filter (diff-checkable count by part × difficulty).*
 - **Solvability probe:** pass@k on the **train pool** (not held-out — avoid leakage) → defines the
   frontier band.
 - **Main runs (parallel on Modal):**

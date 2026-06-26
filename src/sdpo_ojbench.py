@@ -39,8 +39,10 @@ def extract_code_cpp(text):
     return blocks[-1].strip() if blocks else None
 
 
-def judge_cpp(code, cases, timeout):
-    """Compile with g++17 then run binary against cases. Returns (verdict,passed,total,detail)."""
+def judge_cpp(code, cases, timeout, count_all=False):
+    """Compile with g++17 then run the binary against cases, smallest input first.
+    count_all=False: early-exit (prefix passed). count_all=True: run all (true passed,
+    smallest failing case in detail). See judge_solution for the count_all rationale."""
     if not code:
         return "NO_CODE", 0, len(cases), {"reason": "no code block found"}
     base = ROOT / f"_cpp_{os.getpid()}_{time.perf_counter_ns()}"
@@ -51,22 +53,35 @@ def judge_cpp(code, cases, timeout):
                             capture_output=True, timeout=60)
         if cp.returncode != 0:
             return "CE", 0, len(cases), {"stderr": _clip(cp.stderr.decode("utf-8", "replace"))}
-        cases = sorted(cases, key=lambda c: c[0].stat().st_size)  # smallest input first (see judge_solution)
-        for k, (infile, outfile) in enumerate(cases):
+        cases = sorted(cases, key=lambda c: c[0].stat().st_size)  # smallest input first
+        passed = 0
+        first_fail = None
+        for infile, outfile in cases:
             try:
                 proc = subprocess.run([str(binp)], input=infile.read_bytes(),
                                       capture_output=True, timeout=timeout, preexec_fn=_limit)
             except subprocess.TimeoutExpired:
-                return "TLE", k, len(cases), {"failing_case": infile.name}
-            if proc.returncode != 0:
-                return "RE", k, len(cases), {"failing_case": infile.name,
-                                             "stderr": _clip(proc.stderr.decode("utf-8", "replace"))}
-            got = normalize(proc.stdout.decode("utf-8", "replace"))
-            exp = normalize(outfile.read_text(encoding="utf-8", errors="replace"))
-            if got != exp:
-                return "WA", k, len(cases), {"failing_case": infile.name,
-                                             "expected": _clip(exp), "got": _clip(got)}
-        return "AC", len(cases), len(cases), {}
+                fail = ("TLE", {"failing_case": infile.name})
+            else:
+                exp = normalize(outfile.read_text(encoding="utf-8", errors="replace"))
+                if proc.returncode != 0:
+                    fail = ("RE", {"failing_case": infile.name,
+                                   "stderr": _clip(proc.stderr.decode("utf-8", "replace"))})
+                elif normalize(proc.stdout.decode("utf-8", "replace")) != exp:
+                    fail = ("WA", {"failing_case": infile.name, "expected": _clip(exp),
+                                   "got": _clip(normalize(proc.stdout.decode("utf-8", "replace")))})
+                else:
+                    fail = None
+            if fail is None:
+                passed += 1
+            else:
+                if first_fail is None:
+                    first_fail = fail
+                if not count_all:
+                    return fail[0], passed, len(cases), fail[1]
+        if first_fail is None:
+            return "AC", len(cases), len(cases), {}
+        return first_fail[0], passed, len(cases), first_fail[1]
     finally:
         src.unlink(missing_ok=True)
         binp.unlink(missing_ok=True)
@@ -126,22 +141,33 @@ def augment_prompt_with_example(prompt, pid, language="python", which="public", 
     return inject_example(prompt, inp, out)
 
 
-def judge_completion(text, pid, which="public", timeout=6.0, language="python"):
-    """Returns (reward, verdict, feedback_text).
-    reward = fraction of cases passed (dense); verdict in AC/WA/RE/TLE/CE/NO_CODE."""
+def judge_completion(text, pid, which="public", timeout=6.0, language="python",
+                     reward_mode="fraction"):
+    """Returns (reward, verdict, feedback_text). verdict in AC/WA/RE/TLE/CE/NO_CODE.
+
+    reward_mode:
+      "fraction" (default): dense reward = TRUE fraction of cases passed (runs all
+        cases). Distinguishes "passes 8/10" from "1/10" -> non-zero intra-group
+        variance even when no rollout is AC, which gives GRPO/SDPO an advantage signal
+        on all-fail groups. Costs more (no early-exit).
+      "binary": reward = 1.0 iff AC (all cases pass) else 0.0. Cheapest/strictest;
+        but all-fail groups have zero variance -> no policy-gradient signal.
+    AC always yields reward 1.0. Eval (pass@k / pass@1) keys on the VERDICT, not this
+    reward, so eval is unaffected by reward_mode."""
     pub, prv = public_private_cases(pid)
     cases = pub if which == "public" else prv
+    count_all = reward_mode == "fraction"
     if language == "cpp":
-        code = extract_code_cpp(text)
-        verdict, passed, total, detail = judge_cpp(code, cases, timeout)
+        verdict, passed, total, detail = judge_cpp(extract_code_cpp(text), cases, timeout, count_all=count_all)
     else:
-        code = extract_code(text)
-        verdict, passed, total, detail = judge_solution(code, cases, timeout)
-    reward = passed / total if total else 0.0
+        verdict, passed, total, detail = judge_solution(extract_code(text), cases, timeout, count_all=count_all)
     if verdict == "AC":
         reward = 1.0
-    feedback = _format_feedback(verdict, detail)
-    return reward, verdict, feedback
+    elif reward_mode == "binary":
+        reward = 0.0
+    else:  # fraction
+        reward = passed / total if total else 0.0
+    return reward, verdict, _format_feedback(verdict, detail)
 
 
 def _format_feedback(verdict, detail):
@@ -186,15 +212,17 @@ def build_dataset(split="train", difficulties=None, languages=("python",)):
     return Dataset.from_dict(rows)
 
 
-def make_reward_func(which="public", timeout=6.0):
+def make_reward_func(which="public", timeout=6.0, reward_mode="fraction"):
     """TRL reward_func(completions, **kwargs) -> list[float]. The 'id' and
-    'language' dataset columns are forwarded by TRL via kwargs (per rollout)."""
+    'language' dataset columns are forwarded by TRL via kwargs (per rollout).
+    reward_mode: "fraction" (dense passed/total, default) or "binary" (AC=1 else 0)."""
     def reward_func(completions, id=None, language=None, **kwargs):
         out = []
         for k, (comp, pid) in enumerate(zip(completions, id)):
             lang = language[k] if language is not None else "python"
             text = comp[-1]["content"] if isinstance(comp, list) else comp
-            r, _, _ = judge_completion(text, int(pid), which=which, timeout=timeout, language=lang)
+            r, _, _ = judge_completion(text, int(pid), which=which, timeout=timeout,
+                                       language=lang, reward_mode=reward_mode)
             out.append(float(r))
         return out
     reward_func.__name__ = f"ojbench_{which}_reward"

@@ -112,3 +112,14 @@ def test_smallest_failing_case_is_surfaced(tmp_path):
     assert verdict == "WA"
     assert detail["failing_case"] == "small.in"   # smallest-first, not "big.in"
     assert detail["input"] == "1 1"               # small, interpretable feedback
+
+
+# --- reward modes: count_all -> true passed/total dense signal ----------------
+def test_count_all_counts_true_passes(tmp_path):
+    # smallest case FAILS, two larger cases PASS
+    cs = cases(tmp_path, [("1 1", "999"), ("10 20", "30"), ("100 200", "300")])
+    v, p, t, d = judge_solution(SUM, cs, timeout=5, count_all=True)
+    assert v == "WA" and p == 2 and t == 3 and d["failing_case"].endswith(".in")  # true 2/3
+    # default early-exit fails on the smallest first -> prefix passed = 0
+    v2, p2, _, _ = judge_solution(SUM, cs, timeout=5)
+    assert v2 == "WA" and p2 == 0

@@ -37,6 +37,8 @@ def main():
     ap.add_argument("--difficulties", default="easy,medium", help="comma list, e.g. 'easy' or 'easy,medium'")
     ap.add_argument("--languages", default="python,cpp", help="comma list: python,cpp")
     ap.add_argument("--vllm-gpu-util", type=float, default=0.45)
+    ap.add_argument("--reward-mode", default="fraction", choices=["fraction", "binary"],
+                    help="dense passed/total (default) or strict AC=1/else 0")
     # Memory/speed knobs. Defaults are GB10-safe (microbatch=1 + grad ckpt).
     # On a roomier GPU (80 GB H100), --per-device-batch 2+ and/or
     # --no-grad-checkpointing trade memory for a faster step.
@@ -61,7 +63,7 @@ def main():
         args.num_generations = 4
         args.max_completion_length = 512
 
-    reward = make_reward_func(which="public", timeout=6.0)
+    reward = make_reward_func(which="public", timeout=6.0, reward_mode=args.reward_mode)
 
     # Restrict LoRA to the TEXT model (language_model). gemma4's vision/audio
     # towers wrap projections in Gemma4ClippableLinear which PEFT can't target;

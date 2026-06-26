@@ -152,48 +152,59 @@ def _clip(s, n=600):
     return s if len(s) <= n else s[:n] + f"...<+{len(s)-n} chars>"
 
 
-def judge_solution(code, cases, timeout):
-    """Run code against all cases with early exit, SMALLEST INPUT FIRST.
-    Returns (verdict, passed_n, total, detail) where detail describes the first
-    failing case. Smallest-first means a failure surfaces a small, interpretable
-    case (better SDPO teacher feedback) and we fail fast on cheap cases. Order
-    does not change the AC verdict (must pass all); the public/private split is
+def judge_solution(code, cases, timeout, count_all=False):
+    """Run code against all cases, SMALLEST INPUT FIRST.
+    Returns (verdict, passed_n, total, detail).
+
+    count_all=False (default): early-exit on the first failure. `passed_n` = cases
+      passed before that failure (a cheap prefix count). Fastest.
+    count_all=True: run EVERY case; `passed_n` = the TRUE number passed (for a dense
+      passed/total reward). `detail`/`verdict` still describe the SMALLEST failing case
+      (good teacher feedback). Costs more (no early-exit; pays the timeout per TLE case).
+
+    Order never changes the AC verdict (must pass all); the public/private split is
     decided upstream, so re-ordering here does not move cases between splits."""
     if not code:
         return "NO_CODE", 0, len(cases), {"reason": "no code block found in response"}
     cases = sorted(cases, key=lambda c: c[0].stat().st_size)
     sol = ROOT / f"_sol_{os.getpid()}_{time.perf_counter_ns()}.py"
     sol.write_text(code)
+    passed = 0
+    first_fail = None  # (verdict, detail) of the smallest failing case
     try:
-        for k, (infile, outfile) in enumerate(cases):
+        for infile, outfile in cases:
             try:
                 inp = infile.read_bytes()
                 proc = subprocess.run(
                     [sys.executable, str(sol)],
-                    input=inp,
-                    capture_output=True,
-                    timeout=timeout,
-                    preexec_fn=_limit,
+                    input=inp, capture_output=True, timeout=timeout, preexec_fn=_limit,
                 )
             except subprocess.TimeoutExpired:
-                return "TLE", k, len(cases), {"failing_case": infile.name,
-                                              "input": _clip(inp.decode("utf-8", "replace"))}
-            exp = normalize(outfile.read_text(encoding="utf-8", errors="replace"))
-            if proc.returncode != 0:
-                return "RE", k, len(cases), {
-                    "failing_case": infile.name,
-                    "input": _clip(inp.decode("utf-8", "replace")),
-                    "stderr": _clip(proc.stderr.decode("utf-8", "replace")),
-                }
-            got = normalize(proc.stdout.decode("utf-8", "replace"))
-            if got != exp:
-                return "WA", k, len(cases), {
-                    "failing_case": infile.name,
-                    "input": _clip(inp.decode("utf-8", "replace")),
-                    "expected": _clip(exp),
-                    "got": _clip(got),
-                }
-        return "AC", len(cases), len(cases), {}
+                fail = ("TLE", {"failing_case": infile.name,
+                                "input": _clip(inp.decode("utf-8", "replace"))})
+            else:
+                exp = normalize(outfile.read_text(encoding="utf-8", errors="replace"))
+                if proc.returncode != 0:
+                    fail = ("RE", {"failing_case": infile.name,
+                                   "input": _clip(inp.decode("utf-8", "replace")),
+                                   "stderr": _clip(proc.stderr.decode("utf-8", "replace"))})
+                elif normalize(proc.stdout.decode("utf-8", "replace")) != exp:
+                    fail = ("WA", {"failing_case": infile.name,
+                                   "input": _clip(inp.decode("utf-8", "replace")),
+                                   "expected": _clip(exp),
+                                   "got": _clip(normalize(proc.stdout.decode("utf-8", "replace")))})
+                else:
+                    fail = None
+            if fail is None:
+                passed += 1
+            else:
+                if first_fail is None:
+                    first_fail = fail
+                if not count_all:
+                    return fail[0], passed, len(cases), fail[1]
+        if first_fail is None:
+            return "AC", len(cases), len(cases), {}
+        return first_fail[0], passed, len(cases), first_fail[1]
     finally:
         sol.unlink(missing_ok=True)
 

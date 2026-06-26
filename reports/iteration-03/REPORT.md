@@ -47,6 +47,39 @@ in **both py & cpp** → **106 eval instances**, far more discriminative than it
 problems in train. Iteration-3's train pool has **80 hard** — the raw material for any hard-problem
 improvement.
 
+## Pre-flight diagnosis — where base actually fails on hard (and what conditioning buys)
+Before committing compute we generated base rollouts on small-case train-hard problems
+([`data/hard_rollouts.md`](./data/hard_rollouts.md), `src/diagnose_hard.py`), judged with the
+**dense** reward so partial credit + the exact failing case are visible. Three failure archetypes,
+with very different prognoses:
+
+| archetype | example | signature | prompt-fixable? | curriculum value |
+|---|---|---|---|---|
+| **right idea, undelivered** | loj-2442 (0.70 WA) | passes most cases; **over-theorizes** (hunts a closed-form) instead of simulating the *stated* rule + tiering by the Data Range table | **partly** | **high** — best targets |
+| **complexity wall** | loj-2131 (0.20 TLE) | exponential brute force where a poly DP is needed | no | low (needs capability) |
+| **wrong algorithm** | loj-2356/3537 (0.00) | fundamentally off | no | low |
+
+**Prompt-conditioning A/B** ([`data/prompt_condition.md`](./data/prompt_condition.md),
+`src/prompt_condition.py`; n=6, dense reward) on the two reachable problems:
+
+| problem | base | expert_sys | **cp_method** (restate+implement stated rule, tier by input size, output code) |
+|---|---|---|---|
+| loj-2442 | 0.70 | 0.70 | **0.80** best |
+| loj-900011 | 0.50 | 0.48 | **0.62** best |
+
+**Read:** `cp_method` **lifts the ceiling** (+0.10–0.12 best fraction) by getting the model to
+*simulate* rather than theorize — but **reaches no AC in 6 samples**. The residual gap on 2442 is
+(a) a **subtle simulation bug** (now fails at n=62 345 with a wrong count, not a timeout) and (b) the
+**unimplemented n≤10¹⁸ tier** (matrix exponentiation / period detection). Both residuals are
+**judge-visible** ("expected 94 220, got 577 877") and **partial-credit-bearing** — i.e. exactly the
+signal **dense reward + live judge feedback** consume. So conditioning and the SDPO feedback loop are
+**complementary, not substitutes**: bake `cp_method` into the prompt for a free ceiling lift, then let
+feedback-driven training close the residual bug-level gap.
+
+**Design consequences (folded in below):** (1) the hard-reachability probe ranks by **partial-credit
+fraction**, not just pass@k>0 — a 0.70-WA hard is one bug-fix away; a 0.05-TLE hard needs a capability.
+(2) Use the **`cp_method` system prompt** as the iteration-3 default (applied to base + treatment).
+
 ## Design
 
 ### 1. Moving-frontier curriculum (the centerpiece)

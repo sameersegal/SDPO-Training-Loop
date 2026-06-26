@@ -19,26 +19,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from openai import OpenAI
 
 import sdpo_ojbench as S
-
-# Variant A: the iteration-02 expert prompt (reason about complexity, then solve).
-EXPERT_SYS = ("You are an expert competitive programmer. First reason briefly about the "
-              "algorithm and its time complexity given the input limits, then write a single "
-              "correct, efficient solution that reads from stdin and writes to stdout in the "
-              "exact required format.")
-
-# Variant B: targets the observed over-theorizing failure directly — implement the
-# stated rule, tier by the Data Range table, stop searching for a closed-form.
-CP_METHOD_SYS = (
-    "You are an expert competitive programmer. Follow this method, then output only the final code:\n"
-    "1. Restate the exact rule, recurrence, or process the problem defines — do NOT try to guess a "
-    "closed-form pattern when the problem already states the rule. Implement the stated rule.\n"
-    "2. Read the Data Range / Constraints table. Decide per input size which method is needed: a "
-    "direct O(n) simulation is correct and sufficient for small n; only the largest limits "
-    "(e.g. n up to 1e18) require a faster technique (matrix exponentiation, cycle/period detection, "
-    "or a closed form).\n"
-    "3. Write ONE solution that simulates directly for small n and switches to the faster method "
-    "only when n is too large to loop. Apply the modulus throughout. Read stdin, write stdout in the "
-    "exact format. Output only the code.")
+# Single source of truth for the system prompts (sdpo_ojbench.py) so train==eval==probe.
+from sdpo_ojbench import EXPERT_SYS, CP_METHOD_SYS  # noqa: E402,F401
 
 VARIANTS = {"base": None, "expert_sys": EXPERT_SYS, "cp_method": CP_METHOD_SYS}
 

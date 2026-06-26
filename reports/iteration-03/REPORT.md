@@ -156,6 +156,37 @@ can't synthesize a capability that never appears in 32 samples) — flagged, not
 | 26 special-judge problems excluded → not "full 232" | Accepted | Documented; building a checker judge is a separate, fidelity-risky effort, deferred |
 | Budget | — | confirm before launch (probe + reachability + curriculum rounds + eval) |
 
+## Pre-flight smoke tests (GB10 / DGX Spark) — PASSED, with one calibration finding
+Before any full run, the iteration-03 critical path was smoke-tested locally
+(`runs/iteration-03/`, gitignored logs):
+
+**1. Training integration (`sdpo_train.py --smoke --feedback --reward-mode fraction --system cp_method`,
+full split).** ✅ Exit 0. Validated: full 206-pool loads (`OJB_SPLITS=ojb_splits_full.json`, 306 rows);
+the **cp_method system prompt is wired into the training data** (`roles: [system, user]` — the
+previously-missing train/eval consistency, now fixed in `build_dataset`); dense-reward func runs
+(`ojbench_public_reward_fb`); **feedback fires** (`feedback_used_fraction=1`); **no OOM** at
+`--vllm-gpu-util 0.30`; adapter saved. (The smoke's 512-token cap truncates every rollout → reward 0
+→ "flat/degenerate" warnings; that's the cap, not the pipeline — `clipped_ratio=1`.)
+
+**2. Variance-based probe (`solvability_probe.py --system cp_method`, n=4 on a deliberate spread).**
+✅ Exit 0; all four buckets exercised correctly:
+
+| pid | rewards (n=4) | std | class | note |
+|---|---|---|---|---|
+| loj-2608 easy | `1.0, 0.4, 1.0, 0.0` | 0.42 | **frontier** | some AC + some fail → variance |
+| loj-2131 hard | `0, 0, 0, 0.2` | 0.09 | **frontier** | **pass@1=0 but kept** — the win over the old rule |
+| loj-2356 hard | `0, 0, 0, 0` | 0 | **hopeless** | dead zero |
+| loj-2442 hard | `0.4, 0.4, 0.4, 0.4` | 0 | **flat→drop** | small-n artifact (see finding) |
+
+**Finding — probe n must be ≥8 (use 16).** loj-2442 (our *most reachable* hard, 0.7–0.8 elsewhere)
+came out a flat `0.4×4` at n=4 → wrongly dropped as zero-variance. With only 4 samples a frontier
+problem can coincidentally land on one partial score; the variance estimate is too noisy. **Action:
+the curriculum probe runs at n≥8 (16 for the hard-reachability probe).** The moving frontier also
+self-corrects a one-round misclassification on re-probe. *Nuance:* a genuinely flat-partial all-fail
+group has zero GRPO advantage but **still gets the SDPO feedback-distillation signal** — so "flat"
+problems are dead for the policy gradient, not necessarily for the feedback teacher; whether to keep
+them is an open decision (below).
+
 ## Plan of record (run order, once finalized)
 1. **Promote the full split** to the live config (point training/eval at `ojb_splits_full.json` / 206).
 2. **Reachability probe** — base pass@16/32 fractional over 80 train-pool hard → `data/hard_reachable.json`.
@@ -171,5 +202,7 @@ can't synthesize a capability that never appears in 32 samples) — flagged, not
 
 ---
 **Open decisions to finalize before launch:** (a) curriculum rounds × steps-per-round and total
-budget; (b) probe n for the frontier band (cost vs classification noise); (c) whether to start the
-curriculum easy→hard or seed directly with reachable hards; (d) KL coefficient.
+budget; (b) probe n for the frontier band — smoke says **≥8, use 16** (cost vs classification noise);
+(c) whether to start the curriculum easy→hard or seed directly with reachable hards; (d) KL
+coefficient; (e) **flat-partial all-fail groups** (zero advantage but live feedback-distillation) —
+drop them (variance>0 band, the current default) or keep them for the feedback signal?

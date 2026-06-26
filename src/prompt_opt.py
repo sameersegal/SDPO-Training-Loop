@@ -10,11 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from openai import OpenAI
 
 import sdpo_ojbench as S
-
-EXPERT_SYS = ("You are an expert competitive programmer. First reason briefly about the "
-              "algorithm and its time complexity given the input limits, then write a single "
-              "correct, efficient solution that reads from stdin and writes to stdout in the "
-              "exact required format.")
+from sdpo_ojbench import EXPERT_SYS  # noqa: F401  (single source of truth)
 
 
 def variants(prompt, pid):

@@ -212,20 +212,51 @@ def _format_feedback(verdict, detail, passed=None, total=None):
     return "\n".join(parts)
 
 
+# --- canonical system prompts (shared by training, eval, probe) -----------
+# Keep these in ONE place so the prompt the model is trained on matches the one it
+# is probed + evaluated on. iteration-02 used EXPERT_SYS; iteration-03 defaults to
+# CP_METHOD_SYS (targets base's over-theorizing on hard: implement the *stated* rule,
+# tier by the Data Range table, output code — see reports/iteration-03/REPORT.md §Pre-flight).
+EXPERT_SYS = ("You are an expert competitive programmer. First reason briefly about the "
+              "algorithm and its time complexity given the input limits, then write a single "
+              "correct, efficient solution that reads from stdin and writes to stdout in the "
+              "exact required format.")
+
+CP_METHOD_SYS = (
+    "You are an expert competitive programmer. Follow this method, then output only the final code:\n"
+    "1. Restate the exact rule, recurrence, or process the problem defines — do NOT try to guess a "
+    "closed-form pattern when the problem already states the rule. Implement the stated rule.\n"
+    "2. Read the Data Range / Constraints table. Decide per input size which method is needed: a "
+    "direct O(n) simulation is correct and sufficient for small n; only the largest limits "
+    "(e.g. n up to 1e18) require a faster technique (matrix exponentiation, cycle/period detection, "
+    "or a closed form).\n"
+    "3. Write ONE solution that simulates directly for small n and switches to the faster method "
+    "only when n is too large to loop. Apply the modulus throughout. Read stdin, write stdout in the "
+    "exact format. Output only the code.")
+
+SYSTEM_PROMPTS = {"cp_method": CP_METHOD_SYS, "expert": EXPERT_SYS, "none": None}
+
+
 # --- dataset + reward func for TRL ---------------------------------------
-def build_dataset(split="train", difficulties=None, languages=("python",)):
+def build_dataset(split="train", difficulties=None, languages=("python",), system=None, ids=None):
     """Build a dataset over (problem, language) pairs. Each row carries a
-    'language' column so the reward function judges in the right language."""
+    'language' column so the reward function judges in the right language.
+
+    system: optional system-message text prepended to every prompt (keeps the TRAIN
+      prompt identical to the eval/probe prompt — iteration-03 trains under CP_METHOD_SYS).
+    ids: optional explicit pid list (e.g. the frontier band) overriding the split's ids.
+    """
     from datasets import Dataset
-    ids = [i for i in SPLITS[split]
-           if difficulties is None or DIFF_BY_ID[i] in difficulties]
+    pool = ids if ids is not None else SPLITS[split]
+    ids = [i for i in pool if difficulties is None or DIFF_BY_ID[i] in difficulties]
+    sys_msg = [{"role": "system", "content": system}] if system else []
     rows = {"prompt": [], "id": [], "difficulty": [], "language": []}
     for lang in languages:
         pmap = CPP_PROMPT_BY_ID if lang == "cpp" else PROMPT_BY_ID
         for i in ids:
             if i not in pmap:
                 continue
-            rows["prompt"].append([{"role": "user", "content": pmap[i]}])
+            rows["prompt"].append(sys_msg + [{"role": "user", "content": pmap[i]}])
             rows["id"].append(i)
             rows["difficulty"].append(DIFF_BY_ID[i])
             rows["language"].append(lang)

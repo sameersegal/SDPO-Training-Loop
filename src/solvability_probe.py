@@ -1,20 +1,29 @@
-"""Solvability probe -> learnability frontier band.
+"""Solvability probe -> learnability frontier band (VARIANCE-based).
 
-Samples the base model n times on each TRAIN problem, measures pass@1 and mean dense
-reward (fraction of public cases passed), and classifies each problem:
-  - saturated: pass@1 >= --sat (already solved -> nothing to teach)        -> drop
-  - hopeless:  mean dense reward <= --floor AND pass@1 == 0 (model never even
-               partially solves -> feedback can't be acted on)             -> drop
-  - frontier:  everything in between (partial progress or occasional AC)   -> KEEP
+Samples the base/current model n times on each TRAIN problem under the iteration-03
+system prompt, judges with the dense (fraction) reward, and classifies each problem by
+the **intra-group reward variance** — the exact quantity that gives GRPO/SDPO a
+non-zero advantage:
 
-Writes data/frontier_band.json = the kept pids (the iteration-02 training set).
+  - frontier (KEEP): reward std > --min-std  → the rollouts disagree → live advantage.
+  - saturated (drop): std ~ 0 and mean ~ 1   → all AC → no signal (and already solved).
+  - hopeless  (drop): std ~ 0 and mean ~ 0   → passes ~no cases → no signal.
+  - flat      (drop): std ~ 0 and 0<mean<1   → every attempt gets the SAME partial score
+                       (e.g. always 5/10) → still zero variance → no signal.
+
+This is broader than the old `0<pass@1<1` rule: it KEEPS never-AC-but-partial problems
+(rewards like .2/.5/.8) that pass@1 would call hopeless, and it DROPS uniform-partial
+problems pass@1 missed. See docs/EXPERIMENT.md §6a. Re-run each curriculum round (the
+band MOVES as the policy improves — saturation is policy-relative).
+
 Serve the base model on :8000 first (set OJB_SPLITS to choose NOI vs full).
-
-  OJB_SPLITS=ojb_splits_full.json PYTHONPATH=src python src/solvability_probe.py --n 6
+  OJB_SPLITS=ojb_splits_full.json PYTHONPATH=src python src/solvability_probe.py --n 8
+  ... --limit 6   # smoke: probe only the first 6 train problems
 """
 import argparse
 import json
 import os
+import statistics
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from openai import OpenAI
@@ -25,58 +34,80 @@ import sdpo_ojbench as S
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="google/gemma-4-E2B-it")
-    ap.add_argument("--n", type=int, default=6)
+    ap.add_argument("--n", type=int, default=8)
     ap.add_argument("--language", default="python")
     ap.add_argument("--temperature", type=float, default=0.8)
-    ap.add_argument("--max-tokens", type=int, default=8192)
+    ap.add_argument("--max-tokens", type=int, default=10240)
     ap.add_argument("--concurrency", type=int, default=4)
-    ap.add_argument("--sat", type=float, default=0.875, help="pass@1 >= this => saturated (drop)")
-    ap.add_argument("--floor", type=float, default=0.05, help="mean dense reward <= this & 0 AC => hopeless (drop)")
+    ap.add_argument("--system", default="cp_method", choices=["cp_method", "expert", "none"],
+                    help="system prompt — MUST match training so solvability is measured under the same prompt")
+    ap.add_argument("--min-std", type=float, default=1e-6,
+                    help="reward std above this => frontier (keep). Default ~0 = keep any non-degenerate group; "
+                         "raise (e.g. 0.05) to drop near-degenerate weak-signal problems.")
+    ap.add_argument("--limit", type=int, default=None, help="probe only the first N train problems (smoke)")
+    ap.add_argument("--pids", default=None, help="comma list of pids to probe instead of the split")
     ap.add_argument("--base-url", default="http://localhost:8000/v1")
     ap.add_argument("--out", default="data/frontier_band.json")
     args = ap.parse_args()
 
     pmap = S.CPP_PROMPT_BY_ID if args.language == "cpp" else S.PROMPT_BY_ID
-    pids = [p for p in S.SPLITS["train"] if p in pmap]
+    if args.pids:
+        pids = [int(x) for x in args.pids.split(",") if int(x) in pmap]
+    else:
+        pids = [p for p in S.SPLITS["train"] if p in pmap]
+        if args.limit:
+            pids = pids[:args.limit]
+    system = S.SYSTEM_PROMPTS[args.system]
     print(f"probing {len(pids)} train problems (OJB_SPLITS={os.environ.get('OJB_SPLITS','ojb_splits.json')}), "
-          f"n={args.n}, {args.language}")
+          f"n={args.n}, {args.language}, system={args.system}, min_std={args.min_std}")
     client = OpenAI(base_url=args.base_url, api_key="EMPTY", timeout=2400)
 
     def probe(pid):
+        msgs = ([{"role": "system", "content": system}] if system else []) + \
+               [{"role": "user", "content": pmap[pid]}]
         resp = client.chat.completions.create(
-            model=args.model, messages=[{"role": "user", "content": pmap[pid]}],
+            model=args.model, messages=msgs,
             temperature=args.temperature, max_tokens=args.max_tokens, n=args.n)
-        ac, rsum = 0, 0.0
+        rewards, ac = [], 0
         for ch in resp.choices:
             r, v, _ = S.judge_completion(ch.message.content or "", pid, which="public",
                                          language=args.language, reward_mode="fraction")
+            rewards.append(r)
             ac += int(v == "AC")
-            rsum += r
-        return pid, ac / args.n, rsum / args.n  # pass@1, mean dense reward
+        return pid, rewards, ac / len(rewards)
 
     rows = []
     with ThreadPoolExecutor(max_workers=args.concurrency) as ex:
         for f in as_completed([ex.submit(probe, p) for p in pids]):
-            rows.append(f.result())
-            pid, p1, dr = rows[-1]
-            print(f"  loj-{pid} ({S.DIFF_BY_ID[pid]}): pass@1={p1:.2f} dense={dr:.2f}", flush=True)
+            pid, rewards, p1 = f.result()
+            std = statistics.pstdev(rewards)
+            mean = statistics.fmean(rewards)
+            rows.append((pid, rewards, p1, mean, std))
+            print(f"  loj-{pid} ({S.DIFF_BY_ID[pid]}): pass@1={p1:.2f} mean={mean:.2f} std={std:.3f}", flush=True)
 
-    band, sat, hop = [], [], []
-    for pid, p1, dr in rows:
-        if p1 >= args.sat:
+    band, sat, hop, flat = [], [], [], []
+    for pid, rewards, p1, mean, std in rows:
+        if std > args.min_std:
+            band.append(pid)
+        elif mean >= 1.0 - 1e-6:
             sat.append(pid)
-        elif dr <= args.floor and p1 == 0:
+        elif mean <= 1e-6:
             hop.append(pid)
         else:
-            band.append(pid)
-    json.dump({"frontier_band": sorted(band), "saturated": sorted(sat), "hopeless": sorted(hop),
-               "probe": {"n": args.n, "language": args.language, "sat": args.sat, "floor": args.floor},
-               "per_problem": {str(p): {"pass@1": round(a, 3), "dense": round(d, 3)} for p, a, d in rows}},
+            flat.append(pid)  # uniform partial -> zero variance -> no signal
+
+    json.dump({"frontier_band": sorted(band), "saturated": sorted(sat),
+               "hopeless": sorted(hop), "flat": sorted(flat),
+               "probe": {"n": args.n, "language": args.language, "system": args.system,
+                         "min_std": args.min_std},
+               "per_problem": {str(p): {"pass@1": round(p1, 3), "mean": round(m, 3),
+                                        "std": round(s, 3), "rewards": [round(x, 3) for x in rw]}
+                               for p, rw, p1, m, s in rows}},
               open(args.out, "w"), indent=2)
     from collections import Counter
     bc = Counter(S.DIFF_BY_ID[p] for p in band)
     print(f"\nFRONTIER BAND: {len(band)} kept  (by difficulty: {dict(bc)})")
-    print(f"dropped: saturated {len(sat)}, hopeless {len(hop)}")
+    print(f"dropped: saturated {len(sat)}, hopeless {len(hop)}, flat-partial {len(flat)}")
     print(f"wrote {args.out}")
 
 

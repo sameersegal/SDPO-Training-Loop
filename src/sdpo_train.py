@@ -37,6 +37,11 @@ def main():
     ap.add_argument("--output-dir", default="sdpo_out")
     ap.add_argument("--difficulties", default="easy,medium", help="comma list, e.g. 'easy' or 'easy,medium'")
     ap.add_argument("--languages", default="python,cpp", help="comma list: python,cpp")
+    ap.add_argument("--system", default="cp_method", choices=["cp_method", "expert", "none"],
+                    help="system prompt prepended to every train prompt (keeps train==eval prompt; "
+                         "iteration-03 default: cp_method)")
+    ap.add_argument("--frontier-band", default=None,
+                    help="path to a frontier_band.json; train on its pids instead of the whole split")
     ap.add_argument("--vllm-gpu-util", type=float, default=0.45)
     ap.add_argument("--reward-mode", default="fraction", choices=["fraction", "binary"],
                     help="dense passed/total (default) or strict AC=1/else 0")
@@ -57,9 +62,17 @@ def main():
 
     difficulties = args.difficulties.split(",") if args.difficulties else None
     languages = tuple(args.languages.split(","))
-    ds = build_dataset("train", difficulties=difficulties, languages=languages).shuffle(seed=0)
+    import sdpo_ojbench as S
+    system = S.SYSTEM_PROMPTS[args.system]
+    band_ids = None
+    if args.frontier_band:
+        import json
+        band_ids = [int(p) for p in json.load(open(args.frontier_band))["frontier_band"]]
+    ds = build_dataset("train", difficulties=difficulties, languages=languages,
+                       system=system, ids=band_ids).shuffle(seed=0)
     print(f"[sdpo] dataset: {len(ds)} (problem,language) rows "
-          f"diff={difficulties} langs={languages}")
+          f"diff={difficulties} langs={languages} system={args.system} "
+          f"frontier_band={'yes('+str(len(band_ids))+')' if band_ids else 'no'}")
     if args.smoke:
         ds = ds.select(range(min(4, len(ds))))
         args.max_steps = 2

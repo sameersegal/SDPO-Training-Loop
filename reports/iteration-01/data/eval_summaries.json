@@ -1,0 +1,105 @@
+{
+  "gsm8k_base": {
+    "accuracy": 0.9082638362395754,
+    "correct": 1198,
+    "n": 1319,
+    "truncated": 29,
+    "mean_completion_tokens": 432.7
+  },
+  "gsm8k_20step": {
+    "accuracy": 0.9006823351023503,
+    "correct": 1188,
+    "n": 1319,
+    "truncated": 6,
+    "mean_completion_tokens": 382.7
+  },
+  "gsm8k_100step": {
+    "accuracy": 0.8726307808946171,
+    "correct": 1151,
+    "n": 1319,
+    "truncated": 1,
+    "mean_completion_tokens": 372.8
+  },
+  "heldout_pass1_base": {
+    "tag": "base_v2",
+    "served_model": "google/gemma-4-E2B-it",
+    "by_language": {
+      "python": {
+        "easy_pass": "1/5",
+        "medium_pass": "0/5",
+        "hard_pass": "0/15",
+        "overall_pass": "1/25"
+      },
+      "cpp": {
+        "easy_pass": "1/5",
+        "medium_pass": "1/5",
+        "hard_pass": "0/15",
+        "overall_pass": "2/25"
+      }
+    }
+  },
+  "heldout_pass1_20step": {
+    "tag": "sdpo",
+    "served_model": "sdpo",
+    "by_language": {
+      "python": {
+        "easy_pass": "1/5",
+        "medium_pass": "0/5",
+        "hard_pass": "0/15",
+        "overall_pass": "1/25"
+      },
+      "cpp": {
+        "easy_pass": "2/5",
+        "medium_pass": "0/5",
+        "hard_pass": "0/15",
+        "overall_pass": "2/25"
+      }
+    }
+  },
+  "passk_100step_python": {
+    "tag": "sdpo100",
+    "served_model": "sdpo",
+    "n_samples": 8,
+    "temperature": 0.8,
+    "max_tokens": 8192,
+    "by_language": {
+      "python": {
+        "overall": {
+          "n_problems": 25,
+          "pass@1": 0.045,
+          "pass@2": 0.0586,
+          "pass@4": 0.0714,
+          "pass@8": 0.08
+        },
+        "easy": {
+          "n_problems": 5,
+          "pass@1": 0.225,
+          "pass@2": 0.2929,
+          "pass@4": 0.3571,
+          "pass@8": 0.4
+        },
+        "medium": {
+          "n_problems": 5,
+          "pass@1": 0.0,
+          "pass@2": 0.0,
+          "pass@4": 0.0,
+          "pass@8": 0.0
+        },
+        "hard": {
+          "n_problems": 15,
+          "pass@1": 0.0,
+          "pass@2": 0.0,
+          "pass@4": 0.0,
+          "pass@8": 0.0
+        }
+      }
+    },
+    "overall": {
+      "n_problems": 25,
+      "pass@1": 0.045,
+      "pass@2": 0.0586,
+      "pass@4": 0.0714,
+      "pass@8": 0.08
+    }
+  }
+}

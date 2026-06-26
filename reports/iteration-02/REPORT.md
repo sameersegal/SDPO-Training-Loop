@@ -1,6 +1,8 @@
 # Iteration 02 — Live judge feedback on the OJBench frontier
 
-**Status: PLANNED** (this doc is the design; Results sections fill in after the runs.)
+**Status: RUN 1 COMPLETE.** Live-feedback mechanism validated; one feedback-ON run + eval done.
+Headline: **feedback-ON avoided iteration-01's collapse** (medium pass@k and GSM8K held) but did
+**not yet beat base**. Results in §Results.
 **Compute:** Modal H100/H200 · prototype on the local GB10 · **W&B:** project `sdpo-gemma-ojbench`
 
 Builds on [iteration 01](../iteration-01/REPORT.md), which proved a real base pass@k frontier,
@@ -106,14 +108,50 @@ harder problems. We expect feedback-ON to beat feedback-OFF on the same data/rec
 - Caveat: tiny sample, effect driven by one problem → confirm at scale. Floors are *capability* limits
   (the live-feedback/curriculum levers), not prompt limits.
 
-## Results (TBD — populate after the runs)
-- pass@k: base vs feedback-OFF vs feedback-ON — *table + `figures/compare_*.png`*
-- GSM8K regression — *TBD*
-- Response length (train + eval), feedback-ON vs OFF — *`figures/length_*.png`*
-- Did live feedback beat copy-only? Did it resist the collapse? — *TBD*
+## Results (run 1: feedback-ON, easy+medium, 25 steps, LR 3e-5, binary reward, H200)
+![base vs iter-01 vs iter-02 pass@k](./figures/compare_passk.png)
 
-## Provenance (TBD)
-W&B run IDs, Modal adapter path (`sdpo-outputs:/iteration-02/`), spend — see `PROVENANCE.md` after the runs.
+**Mechanism validated.** `feedback_used_fraction` tracked the all-fail groups exactly (fires when
+`success_group_fraction=0`, off when a rollout succeeds) on GB10, Modal smoke, and the full run —
+vs **0** in iteration-01. So the judge feedback reaches the teacher and teaches the all-fail
+medium groups that iteration-01 left with no teacher. **Length did not collapse** (~4000 tokens,
+stable; iteration-01 went 3,500→900).
+
+**Held-out pass@k (python) and GSM8K — three-way:**
+
+| metric | base | iter-01 (100-step, copy-only) | **iter-02 (feedback, 25-step)** |
+|---|---|---|---|
+| easy pass@8 | 60% | 40% | **40%** |
+| **medium pass@8** | 40% | **0% (collapsed)** | **40% (held)** |
+| overall pass@8 | 20% | 8% | **16%** |
+| **GSM8K** | 90.8% | **87.3% (−3.6, regressed)** | **90.5% (held)** |
+
+**Read:** feedback-ON **stopped iteration-01's two failures** — medium pass@k *held* (40→40 vs →0)
+and GSM8K *held* (90.5 vs 87.3). But it **did not beat base**: easy pass@8 still 60→40 and overall
+20→16. The mechanism prevents the collapse; it doesn't yet improve generalization.
+
+**Why no improvement (and the next lever):** **7 of 25 steps were degenerate** — with **binary**
+reward, an all-fail medium group has *zero reward variance* → no policy-gradient signal (feedback
+still drives distillation, but the GRPO advantage is dead on exactly those groups). The
+**dense-reward design (#9)** is the fix (partial-credit variance → live gradient on all-fail
+groups); it was deferred here only for judge cost on medium's huge test cases. Plus only 25 steps.
+
+**Attribution caveat:** iter-02 changed several things vs iter-01 at once (feedback **+** LR 3e-5
+**+** 25 vs 100 steps **+** easy+medium vs easy-only **+** binary reward). So "no collapse" is the
+iteration-02 *recipe*, not feedback in isolation. A feedback-OFF control on the same recipe would
+isolate it (deferred per the feedback-ON-only focus).
+
+## Next (iteration 02, run 2)
+1. **Dense reward** on the frontier band (`data/frontier_band.json`: 35 problems, 28 medium) — fixes
+   the degenerate all-fail steps. Cap completions / use H200 to fit the longer judging.
+2. **More steps** (with the length-collapse early-stop) now that the recipe doesn't collapse.
+3. **feedback-OFF control** on the identical recipe to attribute the no-collapse to feedback.
+
+## Provenance
+- Adapter: Modal `sdpo-outputs:/iteration-02/` (r=32). Pull: `modal volume get sdpo-outputs /iteration-02/...`.
+- Training: run3 on Modal H200, `runs/iteration-02/` (gitignored logs); W&B project `sdpo-gemma-ojbench`.
+- Curated data: [`data/`](./data/) (pass@k, GSM8K, eval summaries); figure regen `python src/generate_slides.py`.
+- Frontier band: [`../../data/frontier_band.json`](../../data/frontier_band.json) (probe: base solvability on the train pool).
 
 ## Reproduce (planned)
 - Spike + filter: `src/` (judge + dataset build).

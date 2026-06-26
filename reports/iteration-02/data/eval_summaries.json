@@ -1,0 +1,38 @@
+{
+  "gsm8k_it02": {
+    "accuracy": 0.9044730856709629,
+    "correct": 1193,
+    "n": 1319
+  },
+  "passk_it02_python": {
+    "overall": {
+      "n_problems": 25,
+      "pass@1": 0.075,
+      "pass@2": 0.11,
+      "pass@4": 0.1457,
+      "pass@8": 0.16
+    },
+    "easy": {
+      "n_problems": 5,
+      "pass@1": 0.225,
+      "pass@2": 0.2929,
+      "pass@4": 0.3571,
+      "pass@8": 0.4
+    },
+    "medium": {
+      "n_problems": 5,
+      "pass@1": 0.15,
+      "pass@2": 0.2571,
+      "pass@4": 0.3714,
+      "pass@8": 0.4
+    },
+    "hard": {
+      "n_problems": 15,
+      "pass@1": 0.0,
+      "pass@2": 0.0,
+      "pass@4": 0.0,
+      "pass@8": 0.0
+    }
+  },
+  "note": "feedback-ON, easy+medium, 25 steps, LR 3e-5, binary reward, H200; 7/25 degenerate steps"
+}

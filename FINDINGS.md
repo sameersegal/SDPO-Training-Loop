@@ -1,13 +1,13 @@
 # SDPO on Gemma-4-E2B-it / OJBench — Findings
 
-**Date:** 2026-06-26 · **Box:** single GB10 (128 GB unified) · **W&B:** [run 9h0fk7ue](https://wandb.ai/sameersegal-personal/sdpo-gemma-ojbench/runs/9h0fk7ue) (project `sdpo-gemma-ojbench`)
+**Date:** 2026-06-26 · **Compute:** prototype on GB10 (128 GB unified); scale + eval on Modal H100/H200 · **W&B:** project `sdpo-gemma-ojbench`
 
-## TL;DR
-We ran the full SDPO post-training loop end-to-end and measured it against a controlled baseline.
-- **The pipeline works**: data → on-policy generation → judge reward → self-distillation → adapter → serve → eval, all validated. On easy problems SDPO self-distillation is **active** (successful rollouts present every step, nonzero distillation loss).
-- **Held-out OJBench: no measurable change** — base **3/25 → SDPO 3/25** (apples-to-apples, same server). This is the **expected null** for a 20-step prototype, *not* a failure.
-- **No regression**: GSM8K held at **90.8% → 90.1%** (−0.8 pt, within noise); the SDPO model is actually **more concise** (truncations 29 → 6).
-- **The eval is underpowered**: the *same base model* measured twice scored **4/25 vs 2/25** — run-to-run noise (±2/25) is as large as any plausible 20-step effect. A real signal needs more steps **and** a more stable metric.
+## TL;DR — a three-act story
+1. **The opportunity is real.** Base `gemma-4-E2B-it` has a large **pass@k frontier** on held-out: Python pass@1 9.5% → **pass@8 20%** (easy 32.5→60, medium 15→40, hard 0). That pass@1→pass@8 gap is exactly what SDPO's successful-rollout distillation targets.
+2. **20 steps = null.** Held-out greedy pass@1 base **3/25 → 3/25**; GSM8K **90.8% → 90.1%** (preserved). Within the ±2/25 noise floor — expected for a smoke-scale run. Pipeline fully validated.
+3. **100 steps = regression (overfitting).** Scaling to 100 easy-only steps **hurt** the model: pass@k easy 60→40, **medium 40→0 (collapsed)**, overall pass@8 **20→8**. ~50 epochs over 30 easy rows at LR 1e-4 → off-distribution drift (the adapter turned verbose). *More training on a too-narrow set is worse, not better.*
+
+**Methodology wins:** **pass@k revealed both the opportunity and the regression** that greedy pass@1 (3/25 either way) hid — it's the metric to standardize on. The eval was underpowered: the *same base model* scored 4/25 vs 2/25 across sessions (±2/25 greedy noise).
 
 ## What we built
 - **Model:** `google/gemma-4-E2B-it` (multimodal; LoRA on the **text tower only**, r=32/α=64).
@@ -38,23 +38,53 @@ General math ability preserved; easy-only code SDPO did **not** cause catastroph
 ### Noise floor (why the held-out null is unsurprising)
 The base model evaluated in two separate sessions: **cpp 4/25** (prior) vs **cpp 2/25** (this session) — identical weights, 2/25 difference. vLLM greedy decoding is batch-nondeterministic, so at n=25 the metric wobbles ±1–2. **The measurement noise exceeds the expected prototype effect.**
 
+### pass@k frontier — base model (Modal H100, n=8, temp 0.8, held-out)
+The discriminative metric. Graphs: `slides/frontier_*.png`, `slides/opportunity_gap_*.png`.
+
+| pass@k | easy | medium | hard | overall |
+|---|---|---|---|---|
+| python pass@1 | 32.5% | 15% | 0% | 9.5% |
+| python pass@8 | **60%** | **40%** | 0% | **20%** |
+| cpp pass@1 | 30% | 20% | 0% | 10% |
+| cpp pass@8 | **60%** | **40%** | 0% | **20%** |
+
+The pass@1→pass@8 gap is the SDPO opportunity. **Medium has a real frontier (15→40%)** even though greedy pass@1 showed it at 0/5 — the metric was hiding the signal.
+
+### 100-step scaling: regression (overfitting) — base vs 100-step (Modal H100)
+Graph: `slides/compare_python.png`.
+
+| pass@k (held-out, python) | base | 100-step |
+|---|---|---|
+| easy pass@1 | 32.5% | 22.5% |
+| easy pass@8 | 60% | 40% |
+| medium pass@8 | 40% | **0%** |
+| overall pass@8 | 20% | **8%** |
+
+Regressed on every cell (n=8; medium = 0/40 attempts, not noise). **Cause: overfitting** — 100 steps over 30 easy rows (~50 epochs) at LR 1e-4; the adapter became verbose/off-distribution (also stalled the cpp judge). Training infra was healthy (45 s/step on H100, ~4× the GB10; `success_group_fraction` 0.5–1.0). The *recipe*, not the pipeline, is the problem. GSM8K-at-100-steps: *[running — global-forgetting vs coding-specific check]*.
+
 ## Training dynamics (proof the loop learned on easy)
 - `success_group_fraction` = 1.0 or 0.5 nearly every step (vs **0** on easy+medium — the base solves no medium problems in 8 tries).
 - `reward_mean` swings 0.09–1.0 step-to-step, **driven by which easy problems are in each small batch**, with no clear 20-step trend — consistent with the flat held-out result.
 - `distillation_loss` nonzero throughout (≈0.07–0.27): the self-distillation objective was genuinely optimized.
 
 ## Interpretation
-1. **Engineering: success.** Every component (judge, splits, colocate training, LoRA-on-text, adapter serving, dual-language eval) works on the GB10.
-2. **Science: inconclusive-but-expected.** 20 steps over 30 easy rows is a smoke-scale run. Per the experiment plan, a real delta needs **hundreds of steps**. We can't yet claim SDPO helps or hurts on held-out — the eval is too noisy and the run too short.
-3. **Safety check passed.** No regression on out-of-domain math.
+1. **Engineering: success.** Every component (judge, splits, colocate training, LoRA-on-text, adapter serving, dual-language eval, Modal scale-up) works.
+2. **Science: a clear lesson.** It's no longer "inconclusive" — 20 steps was null, **100 steps actively regressed**. The recipe (easy-only data + many epochs + LR 1e-4) overfits a 2.3B model. More compute ≠ better without fixing data breadth and regularization.
+3. **The metric matters.** pass@k surfaced both the base frontier and the 100-step regression; greedy pass@1 was blind to both.
 
 ## Recommended next steps
-1. **Scale the run** — hundreds of steps. On the GB10 that's overnight (~5 min/step, generation-bound); on a **single H100/H200 (~12× memory bandwidth)** it's ~1 hr. The work is portable (vanilla HF/TRL/vLLM) — see scale-up note.
-2. **Stabilize the metric** — use **pass@k** (k≥4) and/or enlarge the frontier slice; n=25 greedy pass@1 is too noisy to detect small effects.
-3. **Add live judge feedback (SDPO iteration 2)** — currently feedback is successful-rollouts-only. Patching per-rollout judge text into the teacher reprompt is where SDPO is expected to help **hard / all-failed** groups (which stayed 0/15 here, as predicted).
-4. **Curriculum** — easy-only bootstraps signal; ramp easy → medium as the model improves (medium currently yields 0 successful rollouts cold).
+Ordered by expected payoff. The regression reframes priority #1 from "scale" to "fix the recipe."
+
+1. **Fix the recipe before scaling steps (highest priority).**
+   - **Frontier-band data, not easy-only.** Select training problems by *measured solvability* (base pass@8: easy 60%, **medium 40%**, hard 0) — include the medium problems that sometimes pass. Drop always-fail (no teacher) and always-solved (nothing to learn).
+   - **Regularize against drift:** fewer epochs, lower LR (try 2e-5–5e-5), and/or a KL-to-base anchor; cap completion length to curb the verbosity drift.
+   - **Re-probe the frontier** every N steps (moving curriculum) and watch held-out pass@k as an early-stopping signal — stop before it regresses.
+2. **Standardize on pass@k** (k≥4, n≥8) as the eval metric; retire greedy pass@1. Enlarge the held-out slice for tighter estimates.
+3. **Live judge-text feedback (SDPO iteration 2).** Patch per-rollout judge text into the teacher reprompt — the path to non-zero on **hard / all-failed** groups (0 at every k today), and SDPO's main edge over GRPO.
+4. **GRPO baseline on the frontier band** — show SDPO's advantage where GRPO's advantage collapses (all-same-reward groups), the paper's core claim.
+5. **Reward fidelity / judge robustness** — stricter judging (toward DMOJ) and a hardened cpp judge (a verbose/looping completion stalled it); a false-positive AC trains the wrong thing.
 
 ## Caveats
-- Lightweight judge (no DMOJ; no sudo/pypy3 on this box) — a false-positive AC is a bad training signal; consider stricter judging before trusting rewards at scale.
-- Hard problems are expected to stay ≈0 for a 2.3B model without live feedback.
-- Single shared GPU: training, serving, and the user's other jobs contend for one device.
+- Lightweight judge (no DMOJ; no sudo/pypy3 locally) — false-positive AC = bad reward; also the cpp judge can stall on pathological completions (hardening needed).
+- Hard problems stay ≈0 without live feedback — expected for a 2.3B model.
+- GB10 is generation-bound and **hangs on high-concurrency multi-sample inference** → eval moved to Modal H100.

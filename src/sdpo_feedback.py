@@ -28,18 +28,32 @@ class FeedbackBus:
 
 
 def make_feedback_reward_func(bus, which="public", timeout=6.0, reward_mode="fraction"):
-    """Like make_reward_func, but also stashes per-rollout judge feedback on the bus."""
+    """Like make_reward_func, but also stashes per-rollout judge feedback on the bus.
+
+    Dense (fraction) judging runs EVERY public case with no early-exit, so judging is
+    the per-step bottleneck on hard problems (a TLE rollout pays timeout x cases).
+    judge_completion is subprocess-based (releases the GIL), so we judge the group's
+    completions CONCURRENTLY in a thread pool. ex.map preserves order, so rewards[k] /
+    feedbacks[k] still line up with completion_ids[k] for the teacher builder.
+    """
+    import os
+    from concurrent.futures import ThreadPoolExecutor
+    workers = int(os.environ.get("SDPO_JUDGE_WORKERS", "16"))
+
     def reward_func(completions, id=None, language=None, **kwargs):
-        rewards, feedbacks = [], []
-        for k, (comp, pid) in enumerate(zip(completions, id)):
+        def judge_k(k):
+            comp = completions[k]
             lang = language[k] if language is not None else "python"
             text = comp[-1]["content"] if isinstance(comp, list) else comp
-            r, _, fb = judge_completion(text, int(pid), which=which, timeout=timeout,
+            r, _, fb = judge_completion(text, int(id[k]), which=which, timeout=timeout,
                                         language=lang, reward_mode=reward_mode)
-            rewards.append(float(r))
-            feedbacks.append(fb)
-        bus.feedbacks = feedbacks
-        return rewards
+            return float(r), fb
+
+        n = len(completions)
+        with ThreadPoolExecutor(max_workers=min(workers, max(1, n))) as ex:
+            results = list(ex.map(judge_k, range(n)))  # ex.map preserves input order
+        bus.feedbacks = [fb for _, fb in results]
+        return [r for r, _ in results]
     reward_func.__name__ = f"ojbench_{which}_reward_fb"
     return reward_func
 

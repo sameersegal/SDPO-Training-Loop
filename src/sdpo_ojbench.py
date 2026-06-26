@@ -266,16 +266,27 @@ def build_dataset(split="train", difficulties=None, languages=("python",), syste
 def make_reward_func(which="public", timeout=6.0, reward_mode="fraction"):
     """TRL reward_func(completions, **kwargs) -> list[float]. The 'id' and
     'language' dataset columns are forwarded by TRL via kwargs (per rollout).
-    reward_mode: "fraction" (dense passed/total, default) or "binary" (AC=1 else 0)."""
+    reward_mode: "fraction" (dense passed/total, default) or "binary" (AC=1 else 0).
+
+    Judges the group's completions concurrently (subprocess judge releases the GIL);
+    dense judging is the per-step bottleneck on hard problems. SDPO_JUDGE_WORKERS env
+    caps the pool (default 16). ex.map preserves order."""
+    import os
+    from concurrent.futures import ThreadPoolExecutor
+    workers = int(os.environ.get("SDPO_JUDGE_WORKERS", "16"))
+
     def reward_func(completions, id=None, language=None, **kwargs):
-        out = []
-        for k, (comp, pid) in enumerate(zip(completions, id)):
+        def judge_k(k):
+            comp = completions[k]
             lang = language[k] if language is not None else "python"
             text = comp[-1]["content"] if isinstance(comp, list) else comp
-            r, _, _ = judge_completion(text, int(pid), which=which, timeout=timeout,
+            r, _, _ = judge_completion(text, int(id[k]), which=which, timeout=timeout,
                                        language=lang, reward_mode=reward_mode)
-            out.append(float(r))
-        return out
+            return float(r)
+
+        n = len(completions)
+        with ThreadPoolExecutor(max_workers=min(workers, max(1, n))) as ex:
+            return list(ex.map(judge_k, range(n)))
     reward_func.__name__ = f"ojbench_{which}_reward"
     return reward_func
 

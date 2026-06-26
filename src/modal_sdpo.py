@@ -90,6 +90,7 @@ VOLUMES = {
 @app.function(
     image=image,
     gpu="H100",  # overridden per-run via .with_options(gpu=...)
+    cpu=16.0,  # dense judging is subprocess-bound + thread-parallel — give it real cores
     volumes=VOLUMES,
     secrets=[
         modal.Secret.from_name("huggingface"),  # -> HF_TOKEN (gated gemma-4)

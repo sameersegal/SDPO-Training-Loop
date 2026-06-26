@@ -37,3 +37,4 @@ sdpo_out_modal*/
 adapter100/
 sdpo_passk_*.json
 _run_*.sh
+reports/comparison/figures/

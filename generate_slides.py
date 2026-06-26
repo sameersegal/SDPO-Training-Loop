@@ -41,6 +41,48 @@ BASE = {
 COLORS = {"easy": "#2ca02c", "medium": "#ff7f0e", "hard": "#d62728",
           "overall": "#1f77b4"}
 
+# Per-step training metrics live in reports/<ITER>/data/train_metrics_*.csv
+# (committed). loss/length graphs rebuild from THESE, not the raw logs.
+DATA = ROOT / "reports" / ITER / "data"
+
+
+def load_metrics():
+    """{label: {col: [values]}} from every train_metrics_*.csv in the data dir."""
+    import csv
+    runs = {}
+    for p in sorted(DATA.glob("train_metrics_*.csv")):
+        label = p.stem.replace("train_metrics_", "")
+        cols = {}
+        for row in csv.DictReader(open(p)):
+            for k, v in row.items():
+                cols.setdefault(k, []).append(float(v) if v not in ("", None) else 0.0)
+        runs[label] = cols
+    return runs
+
+
+def fig_loss(runs):
+    fig, (a1, a2) = plt.subplots(2, 1, figsize=(7.5, 6), sharex=True)
+    for label, c in runs.items():
+        a1.plot(c["step"], c["loss"], "-o", ms=3, lw=1.5, label=label)
+        a2.plot(c["step"], c["grad_norm"], "-o", ms=3, lw=1.5, label=label)
+    a1.set_ylabel("SDPO loss (top-100 KL)")
+    a1.set_title("SDPO loss over training\nbounces with batch composition — NOT a convergence/quality signal")
+    a1.grid(True, alpha=0.3); a1.legend(fontsize=8)
+    a2.set_ylabel("grad norm"); a2.set_xlabel("training step"); a2.grid(True, alpha=0.3)
+    fig.tight_layout(); p = OUT / "loss_curve.png"; fig.savefig(p, dpi=150); plt.close(fig)
+    return p
+
+
+def fig_length(runs):
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    for label, c in runs.items():
+        ax.plot(c["step"], c["mean_length"], "-o", ms=4, lw=2, label=label)
+    ax.set_xlabel("training step"); ax.set_ylabel("mean completion length (tokens)")
+    ax.set_title("Completion length over training\n(iteration 01: collapsed ~3,500 -> ~900 tokens — overfitting)")
+    ax.grid(True, alpha=0.3); ax.legend()
+    fig.tight_layout(); p = OUT / "length_collapse.png"; fig.savefig(p, dpi=150); plt.close(fig)
+    return p
+
 
 def load_sdpo_passk():
     """Return {lang: {diff: [pass@k...]}} for the 100-step adapter, or None."""
@@ -141,6 +183,11 @@ def main():
     json.dump(BASE, open(OUT / "passk_base.json", "w"), indent=2)
     made = [fig_frontier("python"), fig_frontier("cpp"),
             fig_gap("python"), fig_gap("cpp")]
+    runs = load_metrics()
+    if runs:
+        made += [fig_loss(runs), fig_length(runs)]
+    else:
+        print(f"[slides] no train_metrics_*.csv in {DATA} — skipping loss/length")
     sdpo = load_sdpo_passk()
     if sdpo:
         json.dump(sdpo, open(OUT / "passk_sdpo.json", "w"), indent=2)

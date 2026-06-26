@@ -85,6 +85,52 @@ Source: *Reinforcement Learning via Self-Distillation* (ICML 2026); implemented 
   required, and hard stays ~0. Wiring live judge text (**iteration 2**) is what would let SDPO
   help all-fail / hard groups — the biggest fidelity gap to the paper.
 
+## 6a. Iteration-03 design notes — moving frontier, signal asymmetry, teacher inputs
+
+**Zero-signal at BOTH ends of the frontier (the GRPO problem, restated).** GRPO/SDPO advantage is the
+group-normalized reward `A_i = (r_i − mean(r))/(std(r)+ε)`. If every rollout in a group gets the
+**same** reward, `std=0` and `A_i=0` → the group contributes nothing to the policy gradient. This is
+symmetric:
+
+| group state | rewards (dense) | variance | PG signal | dense reward rescues? |
+|---|---|---|---|---|
+| **Saturated** (all AC) | `1,1,1,1` | 0 | dead | **No** — 1.0 is the ceiling, nothing spreads above |
+| **Frontier** (some AC) | `1,1,.4,0` | >0 | live | (already had it) |
+| **Partial all-fail** | `.2,.5,.8,.1` | >0 | live | **Yes** — the iteration-02 fix |
+| **Hopeless** (0 cases) | `0,0,0,0` | 0 | dead | **No** — 0.0 is the floor |
+
+Dense reward is **asymmetric**: it revives the all-fail side (fractions spread *below* 1.0) but
+**cannot** revive the saturated side (an AC is pinned at 1.0; nothing spreads above). The two dead
+ends are handled by *different* mechanisms — all-fail by **dense reward + feedback teacher**,
+all-pass by the **curriculum** (drop saturated problems). SDPO's distillation does not rescue
+saturated groups either: the teacher would be "imitate the successes," which the policy already
+produces.
+
+**Frontier selection rule (sharper than `0<pass@k<1`):** keep a group iff its **intra-group reward
+variance > 0**. This is *broader* than pass@k-based selection — it also keeps never-AC-but-partial
+groups (`.2,.5,.8`) that pass@k calls "hopeless" — and drops exactly the two pinned ends. "Use all the
+data" therefore means: the **pool** is all 153 train problems; the **active** per-round set is the
+variance>0 subset, **re-selected each round** because saturation is *policy-relative* and shifts
+(mastered frontier → saturated → drops out → band moves harder). `solvability_probe.py` classifies on
+this. Don't-waste-compute option: **dynamic sampling** (DAPO) over-samples and discards zero-variance
+groups so every step is full of signal. Stability caveat: zero gradient ≠ safe to abandon — a dropped
+saturated problem can regress (iteration-01's easy/GSM8K drift) → **KL-to-base anchor** + small
+**rehearsal** set protect mastered skills (a *stability* lever, not a *signal* lever).
+
+**What the teacher is conditioned on under partial reward (answering "does the teacher see the best
+attempt?"): NO.** In an all-fail group the teacher reads **each rollout's own** judge feedback, not
+the group's best near-miss. TRL admits a rollout as a teacher *solution* only when reward ≥
+`success_reward_threshold` (default `1.0` = AC) and then takes the **first** qualifying rollout by
+index, not the highest-reward one (`sdpo_trainer.py:225,243`). So a `0.8` partial attempt is never
+distilled as a "Correct solution." Admitting near-misses (lower the threshold) is possible but risky —
+it distills a still-buggy solution, so the model can copy the bug. Decision for iteration-03: **keep
+threshold=1.0** and instead give the teacher proximity signal in *text* via the pass-rate line below.
+
+**Pass-rate in the feedback (`reward_mode="fraction"` only).** `_format_feedback` now adds
+`Passed p/t tests (pct%)` right after the verdict, so the self-teacher sees *how close* the attempt
+was — the same proximity the dense advantage encodes, surfaced in the text it reads. Omitted in binary
+mode (where `passed` is a misleading prefix count). See `docs/design/JUDGE.md` §5.
+
 ## 7. Training configuration (`sdpo_train.py`)
 
 - **LoRA** (**r=32, α=64**) on the **text model only**: regex

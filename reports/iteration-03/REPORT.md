@@ -93,11 +93,34 @@ Solvability is measured, not assumed, and **re-measured as the model improves**:
 Over rounds the band migrates **easy→medium→hard**, so the curriculum tracks capability instead of a
 fixed difficulty label. Probe always on the **train pool only** (held-out stays clean).
 
-### 2. Dense reward (fixes iteration-02's dead gradient)
+### 2. Dense reward (fixes iteration-02's dead gradient) + the signal asymmetry
 `reward_mode="fraction"` (passed/total) — already implemented. An all-fail group now has **partial-
 credit variance** → a live GRPO advantage, where iteration-02's binary reward gave it none (the 7/25
 degenerate steps). Run all cases for the fraction; cap completion length / use H200 for the bigger
 hard-problem judging cost.
+
+**Zero signal at BOTH ends — and the asymmetry (does all-pass = dead, like GRPO? Yes).** A group whose
+rollouts all share a reward has zero advantage variance → no policy gradient. Symmetric: **all-AC
+(saturated)** is just as dead as **all-fail-binary**. Dense reward is **asymmetric** — it revives the
+all-fail side (fractions spread *below* 1.0) but **cannot** revive saturation (an AC is pinned at 1.0;
+nothing spreads above). So the two ends need different fixes: **all-fail → dense reward + feedback
+teacher**; **all-pass → the curriculum drops it**. Hence the proper frontier rule is **keep groups
+with intra-group reward variance > 0** (broader than `0<pass@k<1`: it also keeps never-AC-but-partial
+groups), re-selected each round because saturation is policy-relative and moves. "Use all the data" =
+the *pool* is all 153 train problems; the *active* set each round is the variance>0 subset. Don't-
+waste-compute: **dynamic sampling** (discard zero-variance groups). Forgetting guard: **KL anchor +
+rehearsal** (zero gradient ≠ safe to abandon). Full table in [`docs/EXPERIMENT.md`](../../docs/EXPERIMENT.md) §6a.
+
+### 2a. Teacher inputs under partial reward (two prompt-construction decisions)
+- **Does the teacher see the best attempt? No** (by design). In an all-fail group the teacher reads
+  **each rollout's own** judge feedback, not the group's best near-miss; TRL only distills a rollout
+  as a *solution* when reward ≥ `success_reward_threshold` (=1.0, AC) and picks the *first* such by
+  index. A `0.8` near-miss is never used as a "Correct solution." We **keep threshold=1.0** (admitting
+  a buggy near-miss risks distilling its bug) and instead give the teacher *proximity* via text ↓.
+- **Pass-rate in the feedback (added).** The dense-mode feedback now includes `Passed p/t tests
+  (pct%)` after the verdict, so the self-teacher sees how close the attempt was — the same proximity
+  the advantage encodes, in the text it reads. (`docs/design/JUDGE.md` §5; reflected in
+  [`prompt_scenarios.md`](./prompt_scenarios.md) on the next render.)
 
 ### 3. Hard-reachability probe (`sampling @16/32`, your request)
 Before trusting the curriculum to reach hard, **measure which hard problems are *ever* sometimes-

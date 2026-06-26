@@ -173,17 +173,31 @@ def judge_completion(text, pid, which="public", timeout=6.0, language="python",
         reward = 0.0
     else:  # fraction
         reward = passed / total if total else 0.0
-    return reward, verdict, _format_feedback(verdict, detail)
+    # Pass-rate line is only honest in fraction mode (count_all ran EVERY case, so
+    # `passed` is the TRUE count). In binary mode `passed` is a cheap prefix count
+    # (cases cleared before the early-exit failure) -> omit it to avoid misleading
+    # the teacher with a fake percentage.
+    pr = (passed, total) if count_all else (None, None)
+    return reward, verdict, _format_feedback(verdict, detail, passed=pr[0], total=pr[1])
 
 
-def _format_feedback(verdict, detail):
-    """Textual environment output for the SDPO self-teacher reprompt."""
+def _format_feedback(verdict, detail, passed=None, total=None):
+    """Textual environment output for the SDPO self-teacher reprompt.
+
+    When passed/total are given (dense/fraction mode only — see judge_completion),
+    a pass-rate line is added so the teacher sees HOW CLOSE the attempt was: a
+    "passed 16/20 (80%)" rollout is a near-miss worth nudging, vs "1/20" which is
+    fundamentally off. This proximity signal is what dense reward exposes; surfacing
+    it in the text gives the self-teacher the same information the advantage does.
+    """
     if verdict == "AC":
         return "All public tests passed."
     if verdict == "NO_CODE":
         return ("Your response did not contain a Python code block in the "
                 "required ```python ...``` format, so it could not be run.")
     parts = [f"Verdict: {verdict}."]
+    if passed is not None and total:
+        parts.append(f"Passed {passed}/{total} tests ({100 * passed // total}%).")
     if "failing_case" in detail:
         parts.append(f"Failing test '{detail['failing_case']}'.")
     if "input" in detail:

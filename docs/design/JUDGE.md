@@ -63,18 +63,36 @@ judge feedback (§5) is for. **Eval is unaffected**: pass@k / pass@1 key on the 
 not on this reward.
 
 ## 5. Feedback design — the SDPO teacher signal
-`_format_feedback(verdict, detail)` turns a verdict into environment text the SDPO teacher can be
-conditioned on (`docs/EXPERIMENT.md` §6, `src/sdpo_prompts.py`):
+`_format_feedback(verdict, detail, passed=None, total=None)` turns a verdict into environment text
+the SDPO teacher can be conditioned on (`docs/EXPERIMENT.md` §6, `src/sdpo_prompts.py`):
 - **AC** → "All public tests passed."
-- **WA** → `Verdict: WA. Failing test '<case>'. Input: … Expected output: … Your output: …`
+- **WA** → `Verdict: WA. Passed <p>/<t> tests (<pct>%). Failing test '<case>'. Input: … Expected output: … Your output: …`
   (the expected output is a *corrective leak* from a small public case).
-- **RE** → verdict + failing input + stderr.
-- **TLE** → verdict + "exceeded the time limit" (a complexity signal).
+- **RE** → verdict + pass-rate + failing input + stderr.
+- **TLE** → verdict + pass-rate + "exceeded the time limit" (a complexity signal).
 - **NO_CODE** → explains the required ```` ```python ```` fence.
+
+**Pass-rate line (dense mode only).** When the judge ran every case (`reward_mode="fraction"`,
+`count_all=True`), `passed`/`total` are threaded in and a `Passed p/t tests (pct%)` line is added
+right after the verdict. This surfaces *how close* the attempt was — a `16/20 (80%)` near-miss is a
+nudge-worthy rollout, a `1/20` is fundamentally off — i.e. the same proximity information the dense
+**reward/advantage** carries, now also in the *text* the self-teacher reads. It is **omitted in
+binary mode**, where `passed` is only a cheap prefix count (cases cleared before the early-exit
+failure) and a percentage would mislead. (`tests/test_judge_feedback.py`.)
 
 This text is what distinguishes **copy-only** SDPO (teacher only shows a *successful* rollout) from
 **live-feedback** SDPO (teacher is told *why the attempt failed*). Iteration 01 was copy-only
 (`include_environment_feedback=False`) and mode-collapsed; iteration 02 wires this feedback in.
+
+**What the teacher does NOT see (a deliberate limitation).** In an all-fail group under partial
+reward, the teacher is conditioned on **each rollout's own** feedback — *not* on the group's **best
+near-miss**. TRL only treats a rollout as a teacher *solution* when its reward ≥ `success_reward_threshold`
+(default `1.0` = AC), and even then picks the **first** such rollout by index, not the highest-reward
+one (`sdpo_trainer.py:243`, `successful_demo_indices[i] = successful[0]`). So a `0.8` partial attempt
+is never distilled as a "solution." Lowering the threshold to admit near-misses is possible but risky
+(it distills a still-*buggy* solution → the model can copy the bug); the pass-rate line above is the
+lighter-weight way to give the teacher proximity signal without that risk. See `docs/EXPERIMENT.md` §6.
+
 **Known limitation:** the `NO_CODE` message is hardcoded "Python" even for C++ (we prototype
 feedback Python-first).
 

@@ -48,6 +48,21 @@ def test_feedback_tle_message():
     assert "exceeded the time limit" in txt
 
 
+def test_feedback_pass_rate_line_in_fraction_mode():
+    # dense mode passes passed/total -> teacher sees how close the attempt was
+    txt = _format_feedback("WA", {"failing_case": "2.in", "expected": "7", "got": "12"},
+                           passed=16, total=20)
+    assert "Passed 16/20 tests (80%)." in txt
+    # verdict line first, pass-rate right after it
+    assert txt.index("Verdict: WA.") < txt.index("Passed 16/20")
+
+
+def test_feedback_no_pass_rate_when_omitted():
+    # binary mode omits passed/total -> no (misleading) percentage
+    txt = _format_feedback("WA", {"failing_case": "2.in", "expected": "7", "got": "12"})
+    assert "Passed" not in txt and "%)" not in txt
+
+
 # --- judge_solution (Python) end-to-end --------------------------------------
 SUM = "a,b=map(int,input().split())\nprint(a+b)\n"
 

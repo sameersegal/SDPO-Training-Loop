@@ -161,6 +161,7 @@ def main(
     grad_checkpointing: bool = True,  # off => faster backward on the roomy H100
     feedback: bool = False,           # iteration 02: live per-rollout judge feedback
     lr: float = 1e-4,                 # iteration 02 recipe: try 3e-5
+    reward_mode: str = "fraction",    # "binary" = fast early-exit (medium's huge cases)
 ):
     num_gpus = int(gpu.split(":")[1]) if ":" in gpu else 1
     if smoke:
@@ -175,6 +176,7 @@ def main(
             "--vllm-gpu-util", str(vllm_gpu_util),
             "--per-device-batch", str(per_device_batch),
             "--lr", str(lr),
+            "--reward-mode", reward_mode,
             "--output-dir", "sdpo_out",
         ]
         if not grad_checkpointing:

@@ -94,7 +94,13 @@ def main():
         teacher_model_kind="ema",
         use_successful_as_teacher=True,
         success_reward_threshold=1.0,
-        include_environment_feedback=args.feedback,  # live judge feedback into the teacher
+        # Live judge feedback into the teacher. feedback-only-without-solution targets
+        # the ALL-FAIL groups (iteration-01's gap: no successful rollout -> no teacher);
+        # success groups still use the solution. This also bounds teacher-prompt length
+        # (prompt+solution OR prompt+feedback, never both) so it fits the 80 GB H100.
+        include_environment_feedback=args.feedback,
+        environment_feedback_only_without_solution=args.feedback,
+        max_reprompt_len=8192,
         # --- generation / RL ---
         num_generations=args.num_generations,
         max_completion_length=args.max_completion_length,

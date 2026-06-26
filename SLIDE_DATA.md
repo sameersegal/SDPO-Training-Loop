@@ -4,9 +4,9 @@ Deck-ready numbers, graphs, and talking points. Graphs are in [`slides/`](./slid
 Re-generate graphs with `python generate_slides.py` (auto-adds the 100-step comparison
 once `sdpo_passk_sdpo_python.json` is present).
 
-> Status: base pass@k + 20-step results are final. **100-step pass@k comparison is being
-> finalized** (re-running cleanly after a cpp-judge stall) — the `compare_*.png` panels and
-> the comparison rows below fill in automatically. Everything else is locked.
+> Status: base pass@k, 20-step, and **100-step pass@k (python) are final**. The 100-step
+> result is a **regression** (overfitting) — see Slide 4. GSM8K-at-100-steps is running to
+> confirm whether the damage is global. cpp-at-100-steps pending (cpp judge stalled).
 
 ---
 
@@ -45,11 +45,22 @@ Base `gemma-4-E2B-it` pass@k on the held-out set (n=8 samples, temp 0.8, Modal H
 - **No held-out change** — but that's *within the noise floor*: the same base model scored 4/25 vs 2/25 across two greedy-pass@1 sessions (±2/25). Expected null for a 20-step run.
 - **No regression** on out-of-domain math (GSM8K preserved; the SDPO model was actually *more concise* — truncations 29 → 6).
 
-## Slide 4 — Scaling to 100 steps (Modal H100)
-- **Completed**: 100 steps, ~**45 s/step** steady-state (76 min) — **~4× faster than the GB10** (~187 s/step). Cost ~$6.
-- Training signal healthy throughout (`success_group_fraction` 0.5–1.0).
-- **Base vs 100-step pass@k comparison:** `slides/compare_python.png` — *[filling in]*.
-  - Headline question for the deck: *did 5× more training lift the frontier (pass@k) above the noise?*
+## Slide 4 — Scaling to 100 steps: it OVERFIT (the key cautionary result)
+**Graph:** `slides/compare_python.png`
+
+| pass@k (held-out, python) | base | **100-step** |
+|---|---|---|
+| easy pass@1 | 32.5% | 22.5% |
+| easy pass@8 | 60% | 40% |
+| medium pass@8 | 40% | **0%** |
+| overall pass@8 | 20% | **8%** |
+
+**Talking points:**
+- 100 steps **regressed across every cell** — easy down, **medium frontier collapsed (40% → 0%)**, overall pass@8 halved. Not noise: n=8, medium = 0/40 attempts.
+- **Cause: overfitting / mode-collapse.** 100 steps over only **30 easy rows** (~50 epochs) at LR 1e-4. The adapter also turned *verbose* (longer completions, more truncation) — off-distribution drift.
+- **The arc:** base shows a real frontier (Slide 1) → 20 steps = null → 100 steps = regression. **More training on a narrow easy-only set hurts.**
+- **Training infra worked fine**: 100 steps, ~**45 s/step** on H100 (~4× the GB10), healthy `success_group_fraction`. The problem is the *recipe* (data breadth + steps/LR), not the pipeline.
+- GSM8K-at-100-steps *[running]* — tells us if the damage is global (forgetting) or coding-specific.
 
 ## Slide 5 — Methodology insight (a strong "how we did it right" slide)
 - **pass@k > greedy pass@1.** Greedy wobbles ±2/25 (batch nondeterminism); pass@k is clean & monotonic and *is* the metric SDPO exploits.
@@ -60,10 +71,11 @@ Base `gemma-4-E2B-it` pass@k on the held-out set (n=8 samples, temp 0.8, Modal H
 - Modal **H100** (HBM3) ~4× faster per step; **H200/multi-GPU did not reliably beat H100** at this dataset size (job is generation-bound; 4×H100 OOMs + starves 30 rows).
 - The GB10 **hangs on high-concurrency multi-sample inference** (kernel-version issue) — we moved eval to Modal H100 for reliability.
 
-## Slide 7 — Next steps
-1. **Live judge-text feedback (iteration 2)** — the path to helping hard / all-failed groups (currently 0 at every k).
-2. **Frontier-band curriculum** — train on measured-solvable problems, ramp difficulty as the model improves.
-3. **Bigger / pass@k held-out** for a discriminative generalization metric.
+## Slide 7 — Next steps (informed by the regression)
+1. **Fix the recipe before scaling steps** — easy-only + 100 steps overfit. Use the **frontier band** (easy + medium-that-sometimes-passes; medium pass@8 = 40% base), **fewer epochs / lower LR**, and a KL-to-base anchor to prevent drift.
+2. **Live judge-text feedback (iteration 2)** — the path to helping hard / all-failed groups (0 at every k today).
+3. **Moving-frontier curriculum** — re-probe solvability, ramp difficulty as the model improves.
+4. **pass@k (not greedy) as the standard metric** — discriminative and stable; greedy hid both the base frontier and this regression.
 
 ---
 

@@ -46,6 +46,16 @@ def main():
     ap.add_argument("--difficulties", default="easy,medium", help="comma list, e.g. 'easy' or 'easy,medium'")
     ap.add_argument("--languages", default="python,cpp", help="comma list: python,cpp")
     ap.add_argument("--vllm-gpu-util", type=float, default=0.45)
+    # Memory/speed knobs. Defaults are GB10-safe (microbatch=1 + grad ckpt).
+    # On a roomier GPU (80 GB H100), --per-device-batch 2+ and/or
+    # --no-grad-checkpointing trade memory for a faster step.
+    ap.add_argument("--per-device-batch", type=int, default=1,
+                    help="completions processed per device per micro-step")
+    ap.add_argument("--grad-checkpointing", dest="grad_checkpointing",
+                    action="store_true", default=True)
+    ap.add_argument("--no-grad-checkpointing", dest="grad_checkpointing",
+                    action="store_false",
+                    help="disable activation checkpointing (faster backward, more memory)")
     ap.add_argument("--no-wandb", action="store_true")
     args = ap.parse_args()
 
@@ -94,13 +104,14 @@ def main():
         vllm_gpu_memory_utilization=args.vllm_gpu_util,
         # --- optim ---
         learning_rate=args.lr,
-        # Microbatch of 1 completion keeps the LM-head logits tensor
-        # [bs*seq*vocab] small enough to fit alongside colocate vLLM on the
-        # single GB10 GPU (bs=num_generations OOMs at step 0). Effective batch
-        # is preserved at num_generations via gradient accumulation.
-        per_device_train_batch_size=1,
-        gradient_accumulation_steps=2 * args.num_generations,
-        gradient_checkpointing=True,
+        # Microbatch keeps the LM-head logits tensor [bs*seq*vocab] small enough
+        # to fit alongside colocate vLLM (bs=num_generations OOMs the GB10 at
+        # step 0). Effective batch is held at 2*num_generations via accumulation.
+        per_device_train_batch_size=args.per_device_batch,
+        gradient_accumulation_steps=max(
+            1, (2 * args.num_generations) // args.per_device_batch
+        ),
+        gradient_checkpointing=args.grad_checkpointing,
         gradient_checkpointing_kwargs={"use_reentrant": False},
         max_steps=args.max_steps,
         logging_steps=1,

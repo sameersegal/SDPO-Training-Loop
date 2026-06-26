@@ -86,13 +86,24 @@ VOLUMES = {
     ],
     timeout=6 * 60 * 60,
 )
-def train(args: list[str]):
+def train(args: list[str], num_gpus: int = 1):
     import os
     import subprocess
     import sys
 
     os.chdir("/root/app")
     os.environ.setdefault("WANDB_PROJECT", APP_NAME)
+
+    # Log the GPU actually provisioned (Modal's UI shows the decorator's declared
+    # gpu, not the per-run .with_options() override — so confirm from inside).
+    try:
+        import torch
+
+        p = torch.cuda.get_device_properties(0)
+        print(f"[modal] GPU: {p.name} x{torch.cuda.device_count()} "
+              f"({p.total_memory / 1024**3:.0f} GiB each)", flush=True)
+    except Exception as e:
+        print(f"[modal] GPU probe failed: {e}", flush=True)
 
     # Sanity: confirm the test data actually mounted (a silent-empty volume is
     # the #1 way this fails — every rollout would score 0 with no error).
@@ -101,8 +112,19 @@ def train(args: list[str]):
     print(f"[modal] ojbench test-case dirs visible: {n}", flush=True)
     assert n > 0, f"{noi} is empty — run `modal volume put ojbench-data ...` first"
 
-    cmd = [sys.executable, "sdpo_train.py", *args]
-    print("[modal] running:", " ".join(cmd), flush=True)
+    if num_gpus > 1:
+        # Data-parallel: each process owns one GPU, runs its own colocate vLLM
+        # and generates a shard of the rollouts. ~N x generation throughput.
+        cmd = [
+            "accelerate", "launch",
+            "--num_processes", str(num_gpus),
+            "--num_machines", "1",
+            "--mixed_precision", "bf16",
+            "sdpo_train.py", *args,
+        ]
+    else:
+        cmd = [sys.executable, "sdpo_train.py", *args]
+    print(f"[modal] num_gpus={num_gpus} running:", " ".join(cmd), flush=True)
     subprocess.run(cmd, check=True)
 
     outputs.commit()  # persist the saved adapter
@@ -113,16 +135,21 @@ def train(args: list[str]):
 @app.local_entrypoint()
 def main(
     smoke: bool = False,
-    gpu: str = "H100",  # e.g. H100, H200, A100-80GB
+    # Single H100 is the right unit for this small (30-row) job: 4xH100 both
+    # OOMs (each DDP rank loads a full policy+teacher+vLLM) AND starves the GPUs
+    # (dataset split 4 ways). Speed comes from a faster single-GPU step, not more
+    # GPUs. Multi-GPU (e.g. "H100:4") still works via accelerate if the dataset grows.
+    gpu: str = "H100",
     difficulties: str = "easy",
     languages: str = "python,cpp",
     num_generations: int = 8,
     max_completion_length: int = 8192,
     max_steps: int = 20,
-    # H100 is 80 GB (< GB10's 128 GB unified): keep vLLM's KV reservation small so
-    # the policy + EMA teacher + 8k-token LM-head logits fit. 0.25 ~= 20 GB for vLLM.
-    vllm_gpu_util: float = 0.25,
+    vllm_gpu_util: float = 0.25,  # 0.45 OOM'd the 80 GB H100; 0.25 is validated
+    per_device_batch: int = 1,
+    grad_checkpointing: bool = True,  # off => faster backward on the roomy H100
 ):
+    num_gpus = int(gpu.split(":")[1]) if ":" in gpu else 1
     if smoke:
         args = ["--smoke", "--difficulties", "easy", "--languages", languages]
     else:
@@ -133,7 +160,10 @@ def main(
             "--max-completion-length", str(max_completion_length),
             "--max-steps", str(max_steps),
             "--vllm-gpu-util", str(vllm_gpu_util),
+            "--per-device-batch", str(per_device_batch),
             "--output-dir", "sdpo_out",
         ]
-    print(f"[modal] gpu={gpu}  args={args}")
-    train.with_options(gpu=gpu).remote(args)
+        if not grad_checkpointing:
+            args.append("--no-grad-checkpointing")
+    print(f"[modal] gpu={gpu} num_gpus={num_gpus}  args={args}")
+    train.with_options(gpu=gpu).remote(args, num_gpus=num_gpus)

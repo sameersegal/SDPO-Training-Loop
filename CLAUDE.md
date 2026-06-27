@@ -130,6 +130,24 @@ figures), `PROVENANCE.md` (W&B run IDs, Modal adapter path, spend), `data/` (per
 eval summaries), `figures/`. Copy the trained adapter to `sdpo-outputs:/iteration-NN/` so the next run
 can't overwrite it. Raw logs/results stay in `runs/` (gitignored).
 
+## Long-running runs MUST survive restarts & network drops
+Training and eval runs take hours; they must outlive a dropped session, a network blip, or a
+client restart, and be resumable. Non-negotiables:
+- **Run detached.** Modal: `modal run --detach src/modal_sdpo.py::main ...` (an attached `modal run`
+  is killed when the local client/session exits — this cost us a run mid-train). Local GB10: detached
+  tmux. Never block a multi-hour run on a foreground client.
+- **Record the run id so it survives a restart.** Write the Modal **app id** (and the recipe) to
+  `runs/iteration-NN/RUNNING_APP_ID.txt` right after launch. After any restart, reattach/monitor via
+  that id + the `sdpo-outputs` Volume — do **not** rely on the local log (it freezes when the client
+  dies; the remote keeps going).
+- **Checkpoint + commit so a run can resume from the last checkpoint.** `sdpo_train.py --save-steps N`
+  (`save_strategy="steps"`, keep all), and the Modal `train()` **commits the `sdpo-outputs` Volume
+  periodically** so checkpoints are durable mid-run, not just at the end. Resume from the latest
+  `checkpoint-*` rather than restarting from step 0; on the GB10, preflight free memory first.
+- **Monitor via durable state, not the client.** Poll the Volume for `checkpoint-*` and
+  `modal app list` for status; a monitor that watches files/app-state (not the attached log) is itself
+  restart-safe.
+
 ## Stopping GPU jobs
 Kill training/serve jobs by **PID or tmux session**, never `pkill -f vllm` (collateral damage).
-Long runs are launched in detached tmux.
+Long runs are launched in detached tmux (local) or `modal run --detach` (cloud).

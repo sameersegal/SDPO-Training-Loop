@@ -131,6 +131,14 @@ eval summaries), `figures/`. Copy the trained adapter to `sdpo-outputs:/iteratio
 can't overwrite it. Raw logs/results stay in `runs/` (gitignored).
 
 ## Budget discipline (Modal costs real money)
+**Use actuals, not napkin math.** `python src/modal_cost.py` reads `modal billing report` and prints
+the real $ per app (GPU/CPU/Memory split): `--for today` / `--for "this month"` for a window,
+`--this-run` for the app in `runs/iteration-NN/RUNNING_APP_ID.txt`, `--app <id|prefix>` for one run.
+Check it after runs to ground spend decisions in measured cost (e.g. an H200 colocate train step ran
+~$0.x/step; a single **hung** detached run cost **$3.16 for zero progress** — which is *why* the
+de-risk ladder below matters). Billing lags the current partial interval, so re-run after a job ends
+for the final number.
+
 Cloud GPU time is billed — **de-risk new code before a long run, but don't over-test cheap changes.**
 The escalation ladder, cheapest first: **unit tests** (`pytest tests/`, seconds, free) → **GB10 smoke**
 (`sdpo_train.py --smoke`, local, free) → **Modal smoke** (`modal run …::main --smoke`, ~minutes, cents)

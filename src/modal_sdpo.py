@@ -367,7 +367,7 @@ def evaluate(which: str):
     gpu="H100",
     volumes=VOLUMES,
     secrets=[modal.Secret.from_name("huggingface"), modal.Secret.from_name("wandb")],
-    timeout=60 * 60,
+    timeout=2 * 60 * 60,  # safety; early-exit eval + light filter keep it well under
 )
 def passk_one(which: str, languages: str = "python,cpp",
               adapter: str = "/root/app/sdpo_out", ojb_splits: str = "ojb_splits_full.json",

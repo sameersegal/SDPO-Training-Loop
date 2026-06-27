@@ -79,7 +79,12 @@ def main():
         n_ac = 0
         for ch in resp.choices:
             text = ch.message.content or ""
-            _, verdict, _ = judge_completion(text, int(pid), which="private", language=lang)
+            # Eval needs only the VERDICT, so use early-exit (binary): a failing solution
+            # stops at the smallest failing case and never reads the huge cases (some
+            # held-out problems ship 100s of MB). Verdict is identical to fraction mode;
+            # this is what keeps eval from timing out. AC still runs all cases (rare).
+            _, verdict, _ = judge_completion(text, int(pid), which="private", language=lang,
+                                             reward_mode="binary")
             verdicts.append(verdict)
             n_ac += int(verdict == "AC")
         return {"id": pid, "language": lang, "difficulty": DIFF_BY_ID[pid],

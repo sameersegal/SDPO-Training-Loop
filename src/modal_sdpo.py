@@ -176,12 +176,63 @@ def train(args: list[str], num_gpus: int = 1, ojb_splits: str = "ojb_splits_full
 
     t = threading.Thread(target=_committer, daemon=True)
     t.start()
+
+    # --- No-progress watchdog -------------------------------------------------
+    # The expensive failure mode is a SILENT hang (a generation deadlock or a judge
+    # that never returns) burning the GPU for hours with zero progress (cost us ~$10
+    # / ~2h once). Run the trainer as a Popen in its own session, tee its output, and
+    # treat any step-progress line ("X/100" or a metrics dict) as a heartbeat. If no
+    # progress for STALL seconds (after a STARTUP grace for model-load + first gen),
+    # kill the WHOLE process group — capping any hang at minutes, not hours.
+    import signal
+    STARTUP = int(os.environ.get("WATCHDOG_STARTUP_SECS", "1500"))   # 25 min: load + first step
+    STALL = int(os.environ.get("WATCHDOG_STALL_SECS", "900"))        # 15 min between steps
+    last = [time.time()]            # last progress time
+    started = ["no"]               # flips once we see the first progress line
+    killed_by_watchdog = [False]
+
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, bufsize=1, start_new_session=True)
+
+    def _reader():
+        for line in proc.stdout:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            if "/100" in line or "'epoch'" in line or "saved adapter" in line:
+                last[0] = time.time()
+                started[0] = "yes"
+
+    def _watchdog():
+        while proc.poll() is None:
+            if stop.wait(30):
+                return
+            idle = time.time() - last[0]
+            limit = STALL if started[0] == "yes" else STARTUP
+            if idle > limit:
+                print(f"[modal] WATCHDOG: no progress for {idle:.0f}s (>{limit}s, "
+                      f"started={started[0]}) — killing the hung run", flush=True)
+                killed_by_watchdog[0] = True
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    pass
+                return
+
+    rt = threading.Thread(target=_reader, daemon=True)
+    wt = threading.Thread(target=_watchdog, daemon=True)
+    rt.start()
+    wt.start()
     try:
-        subprocess.run(cmd, check=True)
+        rc = proc.wait()
     finally:
         stop.set()
-        outputs.commit()  # persist the saved adapter + any final checkpoint
-        hf_cache.commit()  # persist downloaded weights for next run
+        outputs.commit()  # persist any checkpoint written before a hang/kill
+        hf_cache.commit()
+    if killed_by_watchdog[0]:
+        raise RuntimeError("run killed by no-progress watchdog (hang) — latest checkpoint "
+                           "committed; relaunch with --resume")
+    if rc != 0:
+        raise RuntimeError(f"sdpo_train.py exited {rc}")
     print("[modal] done — adapter + checkpoints saved to volume 'sdpo-outputs' (/sdpo_out)", flush=True)
 
 

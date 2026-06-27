@@ -130,6 +130,21 @@ figures), `PROVENANCE.md` (W&B run IDs, Modal adapter path, spend), `data/` (per
 eval summaries), `figures/`. Copy the trained adapter to `sdpo-outputs:/iteration-NN/` so the next run
 can't overwrite it. Raw logs/results stay in `runs/` (gitignored).
 
+## Budget discipline (Modal costs real money)
+Cloud GPU time is billed — **de-risk new code before a long run, but don't over-test cheap changes.**
+The escalation ladder, cheapest first: **unit tests** (`pytest tests/`, seconds, free) → **GB10 smoke**
+(`sdpo_train.py --smoke`, local, free) → **Modal smoke** (`modal run …::main --smoke`, ~minutes, cents)
+→ **long run** (hours, $). Climb only as far as the risk warrants:
+- Pure-logic changes (judge, prompt assembly, splits, reward shaping) → unit tests are usually enough.
+- Anything touching the train/eval *integration* (new flags, dataset wiring, trainer subclass, Modal
+  image/volume) → at least a smoke on the tier you changed before paying for a long run. The
+  iteration-03 false starts (serial judging stall, missing ICPC volume data, extraction race) were all
+  caught by smokes / the preflight — each would have been an expensive multi-hour failure.
+- **Balance against speed:** the goal is correct results *quickly*. Don't gold-plate — skip a redundant
+  Modal smoke when a GB10 smoke already exercised the same path, and prefer one well-instrumented long
+  run (checkpoints, W&B, eval-ready) over several timid short ones. When unsure of per-step cost, launch
+  the long run but **watch the first few steps** and kill early if the cadence/budget doesn't add up.
+
 ## Long-running runs MUST survive restarts & network drops
 Training and eval runs take hours; they must outlive a dropped session, a network blip, or a
 client restart, and be resumable. Non-negotiables:

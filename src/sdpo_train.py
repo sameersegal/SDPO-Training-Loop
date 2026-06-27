@@ -59,6 +59,9 @@ def main():
                     help="disable activation checkpointing (faster backward, more memory)")
     ap.add_argument("--save-steps", type=int, default=0,
                     help="checkpoint every N steps (0 = save only the final adapter)")
+    ap.add_argument("--resume", action="store_true",
+                    help="resume from the latest checkpoint-* in --output-dir if one exists "
+                         "(safe on a fresh run: starts from step 0 when there's no checkpoint)")
     ap.add_argument("--enforce-eager", dest="enforce_eager", action="store_true", default=True,
                     help="disable vLLM CUDA graphs in the colocate engine (default on). The Modal "
                          "host kernel (4.19) intermittently HANGS the first colocate generation with "
@@ -177,9 +180,20 @@ def main():
             model=args.model, reward_funcs=reward, args=cfg,
             train_dataset=ds, peft_config=peft_cfg,
         )
+    # Resume from the latest checkpoint if asked AND one exists. Guarding on existence
+    # keeps a single command idempotent: first launch starts fresh, a relaunch after a
+    # death picks up the last checkpoint instead of re-burning GPU from step 0.
+    resume = False
+    if args.resume:
+        import glob
+        cks = glob.glob(os.path.join(args.output_dir, "checkpoint-*"))
+        resume = len(cks) > 0
+        print(f"[sdpo] resume requested: {len(cks)} checkpoint(s) in {args.output_dir} -> "
+              f"{'RESUMING from latest' if resume else 'none found, starting fresh'}")
+
     print(f"[sdpo] training: {len(ds)} problems, max_steps={args.max_steps}, "
-          f"G={args.num_generations}, feedback={args.feedback}, report_to={report_to}")
-    trainer.train()
+          f"G={args.num_generations}, feedback={args.feedback}, resume={resume}, report_to={report_to}")
+    trainer.train(resume_from_checkpoint=resume)
     trainer.save_model(args.output_dir)
     print(f"[sdpo] saved adapter to {args.output_dir}")
 

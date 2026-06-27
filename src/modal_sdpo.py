@@ -110,6 +110,9 @@ def train(args: list[str], num_gpus: int = 1, ojb_splits: str = "ojb_splits_full
     # sdpo_ojbench, so set it in the env the subprocess inherits.
     os.environ["OJB_SPLITS"] = ojb_splits
     print(f"[modal] OJB_SPLITS={ojb_splits}", flush=True)
+    # Pull the latest committed volume state so a --resume run sees checkpoints written
+    # by a previous (dead) run.
+    outputs.reload()
 
     # Log the GPU actually provisioned (Modal's UI shows the decorator's declared
     # gpu, not the per-run .with_options() override — so confirm from inside).
@@ -204,6 +207,7 @@ def main(
     system: str = "cp_method",        # iteration 03 default system prompt (train==eval)
     save_steps: int = 20,             # checkpoint cadence -> sdpo-outputs volume
     ojb_splits: str = "ojb_splits_full.json",  # iteration 03: the full 206-pool
+    resume: bool = False,             # resume from latest checkpoint in sdpo_out if present
 ):
     num_gpus = int(gpu.split(":")[1]) if ":" in gpu else 1
     if smoke:
@@ -229,6 +233,8 @@ def main(
         ]
         if not grad_checkpointing:
             args.append("--no-grad-checkpointing")
+        if resume:
+            args.append("--resume")
     if feedback:
         args.append("--feedback")
     print(f"[modal] gpu={gpu} num_gpus={num_gpus} feedback={feedback} system={system} "

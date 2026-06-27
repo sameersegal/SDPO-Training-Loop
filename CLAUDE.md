@@ -148,6 +148,17 @@ The escalation ladder, cheapest first: **unit tests** (`pytest tests/`, seconds,
   image/volume) → at least a smoke on the tier you changed before paying for a long run. The
   iteration-03 false starts (serial judging stall, missing ICPC volume data, extraction race) were all
   caught by smokes / the preflight — each would have been an expensive multi-hour failure.
+- **Make the smoke exercise the REAL failure surface, not just "does it start."** The `--smoke`
+  config (4 shuffled problems, 512-token cap, 2 steps) wired things up but was too small/short to catch
+  iteration-03's expensive failures: serial-judging slowness (the 512 cap hid it), a split problem with
+  no volume data (4 problems missed it), the parallel-extraction race (needs the real concurrent path),
+  the CUDA-graph hang (intermittent), and the per-step cost. Before a long run, do a **representative
+  pre-flight**: a few REAL steps at full `--max-completion-length` with `--save-steps 1` (exercises real
+  generation+judging timing, the parallel judge path, a checkpoint write, and resume) — ~15 min / ~$1
+  vs the ~$18 of late-caught false starts.
+- **Apply known hazards by default.** Bake mitigations we've already paid to learn into the default
+  launch path (enforce_eager for the kernel hang, preflight-all-testdirs, decoupled launch, `--resume`)
+  so they aren't rediscovered at $3–5 each.
 - **Balance against speed:** the goal is correct results *quickly*. Don't gold-plate — skip a redundant
   Modal smoke when a GB10 smoke already exercised the same path, and prefer one well-instrumented long
   run (checkpoints, W&B, eval-ready) over several timid short ones. When unsure of per-step cost, launch
@@ -156,20 +167,27 @@ The escalation ladder, cheapest first: **unit tests** (`pytest tests/`, seconds,
 ## Long-running runs MUST survive restarts & network drops
 Training and eval runs take hours; they must outlive a dropped session, a network blip, or a
 client restart, and be resumable. Non-negotiables:
-- **Run detached.** Modal: `modal run --detach src/modal_sdpo.py::main ...` (an attached `modal run`
-  is killed when the local client/session exits — this cost us a run mid-train). Local GB10: detached
-  tmux. Never block a multi-hour run on a foreground client.
+- **Launch fully DECOUPLED, not just `--detach`.** `--detach` survives a clean client *disconnect*
+  but NOT the client being **signal-killed mid-stream** — an attached `modal run` (or one held open in
+  a session-bound shell/log stream) sends a *cancel* when killed. This cancelled a run at step 11
+  ($4.86 lost). Launch so the client exits cleanly and nothing lingers to be killed:
+  `setsid nohup .venv/bin/modal run --detach src/modal_sdpo.py::main ... > LOG 2>&1 < /dev/null &`.
+  Local GB10: detached tmux. Confirm the client returned ("Done") and the app shows in `modal app list`.
 - **Record the run id so it survives a restart.** Write the Modal **app id** (and the recipe) to
   `runs/iteration-NN/RUNNING_APP_ID.txt` right after launch. After any restart, reattach/monitor via
   that id + the `sdpo-outputs` Volume — do **not** rely on the local log (it freezes when the client
   dies; the remote keeps going).
-- **Checkpoint + commit so a run can resume from the last checkpoint.** `sdpo_train.py --save-steps N`
-  (`save_strategy="steps"`, keep all), and the Modal `train()` **commits the `sdpo-outputs` Volume
-  periodically** so checkpoints are durable mid-run, not just at the end. Resume from the latest
-  `checkpoint-*` rather than restarting from step 0; on the GB10, preflight free memory first.
-- **Monitor via durable state, not the client.** Poll the Volume for `checkpoint-*` and
-  `modal app list` for status; a monitor that watches files/app-state (not the attached log) is itself
-  restart-safe.
+- **Checkpoint cadence < interruption interval, and RESUME (don't restart).** `sdpo_train.py
+  --save-steps N` (`save_strategy="steps"`, keep all) + the Modal `train()` commits the `sdpo-outputs`
+  Volume periodically. **Relaunch with `--resume`** (Modal: `--resume`) — it picks up the latest
+  `checkpoint-*` in the output dir, and is idempotent (fresh run with no checkpoint starts at step 0).
+  Set `N` *smaller than how often runs actually die*: in iteration-03 every failure hit before the
+  first checkpoint (step 20 ≈ 80 min) while interruptions came every ~30–45 min, so ~6 dead runs
+  (~$18) each lost ALL progress. A checkpoint you can't reach (or resume from) saves nothing.
+- **Monitor via durable, STATELESS queries — not a long-lived monitor.** Poll the Volume for
+  `checkpoint-*` and `modal app list` for status with one-shot commands (`python src/modal_cost.py
+  --this-run` for spend); a long-running monitor process dies with the session. The remote run keeps
+  going regardless.
 
 ## Stopping GPU jobs
 Kill training/serve jobs by **PID or tmux session**, never `pkill -f vllm` (collateral damage).

@@ -153,28 +153,35 @@ def train(args: list[str], num_gpus: int = 1, ojb_splits: str = "ojb_splits_full
     except Exception as e:
         print(f"[modal] GPU probe failed: {e}", flush=True)
 
-    # Sanity: confirm the test data actually mounted (a silent-empty volume is
-    # the #1 way this fails — every rollout would score 0 with no error).
-    noi = "/root/app/ojbench_data/NOI"
-    n = len(os.listdir(noi)) if os.path.isdir(noi) else 0
-    print(f"[modal] ojbench test-case dirs visible: {n}", flush=True)
-    assert n > 0, f"{noi} is empty — run `modal volume put ojbench-data ...` first"
+    # Sanity: confirm the test data mounted for EVERY part the chosen split needs
+    # (NOI and/or ICPC). A silent-empty volume is the #1 way this fails — every rollout
+    # would score 0 with no error. The old check only looked at NOI, so a full-split run
+    # with ICPC missing from the volume passed this line and failed deeper in (an
+    # iteration-03 false start burned GPU on exactly that). Derive parts from the split.
+    import json as _json
+    _split = _json.load(open(f"/root/app/{ojb_splits}"))
+    _testdirs = _split.get("testdir_by_id", {})
+    _parts = sorted({_td.split("/")[0] for _td in _testdirs.values()}) or ["NOI"]
+    for _part in _parts:
+        _pdir = f"/root/app/ojbench_data/{_part}"
+        _n = len(os.listdir(_pdir)) if os.path.isdir(_pdir) else 0
+        print(f"[modal] ojbench {_part} test-case dirs visible: {_n}", flush=True)
+        assert _n > 0, (f"{_pdir} is empty — the '{_part}' part isn't on the volume. "
+                        f"Sync it: modal volume put ojbench-data <local>/{_part} /{_part}")
 
     # Preflight EVERY split problem's testdir BEFORE training — a missing dir otherwise
     # crashes mid-step-2 after minutes of generation (an ICPC dir missing did exactly
     # that). Fail fast with the full list instead.
-    import json as _json
-    _split = _json.load(open(f"/root/app/{ojb_splits}"))
     _missing = []
-    for _pid, _td in _split.get("testdir_by_id", {}).items():
+    for _pid, _td in _testdirs.items():
         if not os.path.exists(f"/root/app/ojbench_data/{_td}/init.yml"):
             _missing.append(_td)
     if _missing:
         raise RuntimeError(
             f"{len(_missing)} split testdirs missing from the volume "
             f"(e.g. {_missing[:5]}). Sync them: modal volume put ojbench-data <local> /<part>")
-    print(f"[modal] preflight: all {len(_split.get('testdir_by_id', {}))} split testdirs present",
-          flush=True)
+    print(f"[modal] preflight: all {len(_testdirs)} split testdirs present "
+          f"across parts {_parts}", flush=True)
 
     if num_gpus > 1:
         # Data-parallel: each process owns one GPU, runs its own colocate vLLM
@@ -315,6 +322,61 @@ def main(
     print(f"[modal] gpu={gpu} num_gpus={num_gpus} feedback={feedback} system={system} "
           f"reward={reward_mode} save_steps={save_steps} splits={ojb_splits}  args={args}")
     train.with_options(gpu=gpu).remote(args, num_gpus=num_gpus, ojb_splits=ojb_splits)
+
+
+# ---------------------------------------------------------------------------
+# Off-GPU data preflight: confirm the volume has every testdir a split needs.
+# ---------------------------------------------------------------------------
+@app.function(
+    image=image,
+    # NO gpu= → runs on a cheap CPU worker. Validating the ojbench-data volume
+    # (NOI + ICPC test cases) needs no GPU; doing it here means a missing-ICPC
+    # volume fails in seconds on CPU instead of after a billed H100 spins up.
+    volumes={"/root/app/ojbench_data": ojbench_data},
+    timeout=10 * 60,
+)
+def check_volume_data(ojb_splits: str = "ojb_splits_full.json"):
+    """Return {part: present_count}, missing testdirs, for the split's testdirs."""
+    import json
+    import os
+    from collections import Counter
+
+    root = "/root/app/ojbench_data"
+    testdirs = json.load(open(f"/root/app/{ojb_splits}")).get("testdir_by_id", {})
+    present, missing = Counter(), []
+    for _pid, td in testdirs.items():
+        part = td.split("/")[0]
+        if os.path.exists(f"{root}/{td}/init.yml"):
+            present[part] += 1
+        else:
+            missing.append(td)
+    report = {
+        "split": ojb_splits,
+        "parts": sorted({td.split("/")[0] for td in testdirs.values()}),
+        "present_by_part": dict(present),
+        "missing_count": len(missing),
+        "missing_sample": missing[:10],
+    }
+    print(f"[check] {report}", flush=True)
+    return report
+
+
+@app.local_entrypoint()
+def check_data(ojb_splits: str = "ojb_splits_full.json"):
+    """Cheap CPU preflight — does the ojbench-data volume hold every NOI+ICPC test case
+    the split needs? Run this before a paid GPU launch (esp. after switching from the
+    NOI-only split to the full NOI+ICPC pool):
+        modal run src/modal_sdpo.py::check_data
+        modal run src/modal_sdpo.py::check_data --ojb-splits ojb_splits.json
+    """
+    r = check_volume_data.remote(ojb_splits)
+    if r["missing_count"]:
+        print(f"MISSING {r['missing_count']} testdirs (e.g. {r['missing_sample']}). "
+              f"Present: {r['present_by_part']}. "
+              f"Sync the absent part(s): modal volume put ojbench-data <local>/<PART> /<PART>")
+    else:
+        print(f"OK — all {sum(r['present_by_part'].values())} testdirs present "
+              f"across {r['parts']}: {r['present_by_part']}")
 
 
 # ---------------------------------------------------------------------------

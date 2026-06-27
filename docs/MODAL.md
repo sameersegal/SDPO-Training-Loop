@@ -18,10 +18,28 @@ All commands use the venv's CLI: `.venv/bin/modal` (or activate the venv first).
 .venv/bin/modal secret create huggingface HF_TOKEN=hf_xxxxxxxx
 .venv/bin/modal secret create wandb WANDB_API_KEY=$(grep WANDB_API_KEY .env | cut -d= -f2)
 
-# 3. Upload the 2.7 GB test cases into a Volume (once; ~a few min)
+# 3. Upload the 2.7 GB test cases into a Volume (once; ~a few min).
+#    This uploads whatever is under local ojbench_data/ — BOTH parts must be there:
+#      ojbench_data/NOI/loj-<id>/   (NOI-only split: ojb_splits.json)
+#      ojbench_data/ICPC/<id>/      (full NOI+ICPC pool: ojb_splits_full.json, the it-03 default)
+#    If you started NOI-only, the volume may be missing ICPC — see "Verify the volume" below.
 .venv/bin/modal volume create ojbench-data
 .venv/bin/modal volume put ojbench-data ojbench_data /ojbench_data
 ```
+
+## Verify the volume has every part (NOI + ICPC) — before paying for a GPU
+
+The full 206-pool split (`ojb_splits_full.json`, the iteration-03 default) needs **both**
+NOI and ICPC test cases. A cheap CPU-only preflight reports exactly what's present, so a
+missing-ICPC volume fails in seconds instead of after a billed H100 spins up:
+
+```bash
+.venv/bin/modal run src/modal_sdpo.py::check_data                              # full NOI+ICPC pool
+.venv/bin/modal run src/modal_sdpo.py::check_data --ojb-splits ojb_splits.json # NOI-only
+```
+
+If it reports missing testdirs, sync the absent part: `modal volume put ojbench-data
+ojbench_data/ICPC /ICPC` (the in-container `train()` preflight enforces this too, but on the GPU).
 
 ## Run
 

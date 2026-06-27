@@ -139,8 +139,38 @@ def normalize(s):
 
 
 def _limit():
-    # cap address space ~2GB, cpu time as backstop
+    # cap address space ~2GB; start a new session so the judged process is its OWN
+    # process-group leader — lets _run_capped kill the WHOLE tree on timeout.
     resource.setrlimit(resource.RLIMIT_AS, (2 * 1024**3, 2 * 1024**3))
+    os.setsid()
+
+
+def _run_capped(cmd, input_bytes, timeout):
+    """Run `cmd` with a hard wall-clock cap, killing the ENTIRE process group on
+    timeout. `subprocess.run(timeout=)` only SIGKILLs the direct child — a generated
+    solution that spawns a grandchild holding the stdout pipe makes communicate() hang
+    forever even after the child dies (this silently hung a training step for ~2h while
+    the GPU billed). Group-kill closes the pipes so we actually return.
+
+    Returns subprocess.CompletedProcess; raises subprocess.TimeoutExpired on timeout
+    (so existing `except subprocess.TimeoutExpired` handlers treat it as TLE).
+    """
+    import signal
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, preexec_fn=_limit)
+    try:
+        out, err = proc.communicate(input=input_bytes, timeout=timeout)
+        return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)  # kill child + grandchildren
+        except (ProcessLookupError, PermissionError):
+            pass
+        try:
+            proc.communicate(timeout=10)  # drain now-closed pipes; reap
+        except Exception:  # noqa: BLE001
+            proc.kill()
+        raise
 
 
 # Optional registry id -> test-data dir (populated from a splits file's testdir_by_id).
@@ -207,10 +237,7 @@ def judge_solution(code, cases, timeout, count_all=False):
         for infile, outfile in cases:
             try:
                 inp = infile.read_bytes()
-                proc = subprocess.run(
-                    [sys.executable, str(sol)],
-                    input=inp, capture_output=True, timeout=timeout, preexec_fn=_limit,
-                )
+                proc = _run_capped([sys.executable, str(sol)], inp, timeout)
             except subprocess.TimeoutExpired:
                 fail = ("TLE", {"failing_case": infile.name,
                                 "input": _clip(inp.decode("utf-8", "replace"))})

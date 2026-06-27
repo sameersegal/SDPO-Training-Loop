@@ -138,3 +138,23 @@ def test_count_all_counts_true_passes(tmp_path):
     # default early-exit fails on the smallest first -> prefix passed = 0
     v2, p2, _, _ = judge_solution(SUM, cs, timeout=5)
     assert v2 == "WA" and p2 == 0
+
+
+# --- liveness: a solution spawning a pipe-holding grandchild must not hang the judge ---
+def test_judge_does_not_hang_on_pipe_holding_grandchild(tmp_path):
+    """subprocess.run(timeout=) only kills the direct child; a lingering grandchild
+    holding stdout hangs communicate() forever (this silently burned ~2h of GPU mid-train).
+    _run_capped group-kills, so the judge must return ~timeout, not hang."""
+    import time
+    evil = ("import os,sys,time\n"
+            "pid=os.fork()\n"
+            "if pid==0:\n"
+            "    time.sleep(120)\n"   # grandchild lingers, holding the inherited pipe
+            "    os._exit(0)\n"
+            "sys.exit(0)\n")
+    ip, op = tmp_path / "1.in", tmp_path / "1.out"
+    ip.write_text("1\n"); op.write_text("1\n")
+    t0 = time.perf_counter()
+    verdict, _, _, _ = judge_solution(evil, [(ip, op)], timeout=3, count_all=True)
+    assert time.perf_counter() - t0 < 25, "judge hung — group-kill not working"
+    assert verdict in ("TLE", "RE", "WA")  # bounded, not a hang

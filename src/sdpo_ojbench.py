@@ -23,7 +23,7 @@ from pathlib import Path
 import tempfile
 
 from ojbench_eval import (extract_code, extract_tests, judge_solution, normalize,
-                          register_testdirs, _clip, _limit)
+                          register_testdirs, _clip, _limit, _run_capped)
 from _paths import find_file, ojbench_dir
 
 ROOT = Path(tempfile.gettempdir())  # scratch dir for transient _cpp_* compile artifacts
@@ -55,8 +55,7 @@ def judge_cpp(code, cases, timeout, count_all=False):
     src, binp = base.with_suffix(".cpp"), base
     src.write_text(code)
     try:
-        cp = subprocess.run(["g++", "-O2", "-std=c++17", "-o", str(binp), str(src)],
-                            capture_output=True, timeout=60)
+        cp = _run_capped(["g++", "-O2", "-std=c++17", "-o", str(binp), str(src)], None, 60)
         if cp.returncode != 0:
             return "CE", 0, len(cases), {"stderr": _clip(cp.stderr.decode("utf-8", "replace"))}
         cases = sorted(cases, key=lambda c: c[0].stat().st_size)  # smallest input first
@@ -64,8 +63,7 @@ def judge_cpp(code, cases, timeout, count_all=False):
         first_fail = None
         for infile, outfile in cases:
             try:
-                proc = subprocess.run([str(binp)], input=infile.read_bytes(),
-                                      capture_output=True, timeout=timeout, preexec_fn=_limit)
+                proc = _run_capped([str(binp)], infile.read_bytes(), timeout)
             except subprocess.TimeoutExpired:
                 fail = ("TLE", {"failing_case": infile.name})
             else:

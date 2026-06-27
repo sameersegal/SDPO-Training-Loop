@@ -59,8 +59,29 @@ def main():
                     help="disable activation checkpointing (faster backward, more memory)")
     ap.add_argument("--save-steps", type=int, default=0,
                     help="checkpoint every N steps (0 = save only the final adapter)")
+    ap.add_argument("--enforce-eager", dest="enforce_eager", action="store_true", default=True,
+                    help="disable vLLM CUDA graphs in the colocate engine (default on). The Modal "
+                         "host kernel (4.19) intermittently HANGS the first colocate generation with "
+                         "CUDA graphs on — eager makes it deterministic (~10-20%% slower generation).")
+    ap.add_argument("--no-enforce-eager", dest="enforce_eager", action="store_false")
     ap.add_argument("--no-wandb", action="store_true")
     args = ap.parse_args()
+
+    # Inject enforce_eager into TRL's colocate vLLM (it doesn't expose the flag in
+    # colocate mode — only the server path does). Patch the LLM symbol TRL calls.
+    if args.enforce_eager:
+        try:
+            import trl.generation.vllm_generation as _vg
+            _orig_LLM = _vg.LLM
+
+            def _eager_LLM(*a, **kw):
+                kw.setdefault("enforce_eager", True)
+                return _orig_LLM(*a, **kw)
+
+            _vg.LLM = _eager_LLM
+            print("[sdpo] vLLM colocate: enforce_eager=True (CUDA graphs off — kernel-hang guard)")
+        except Exception as e:  # noqa: BLE001
+            print(f"[sdpo] could not patch enforce_eager: {e}")
 
     difficulties = args.difficulties.split(",") if args.difficulties else None
     languages = tuple(args.languages.split(","))

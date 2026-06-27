@@ -100,9 +100,11 @@ VOLUMES = {
 )
 def train(args: list[str], num_gpus: int = 1, ojb_splits: str = "ojb_splits_full.json"):
     import os
+    import signal
     import subprocess
     import sys
     import threading
+    import time
 
     os.chdir("/root/app")
     os.environ.setdefault("WANDB_PROJECT", APP_NAME)

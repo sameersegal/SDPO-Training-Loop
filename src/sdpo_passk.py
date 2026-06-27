@@ -52,9 +52,16 @@ def main():
     ap.add_argument("--top-p", type=float, default=0.95)
     ap.add_argument("--languages", default="python,cpp")
     ap.add_argument("--concurrency", type=int, default=16)
+    ap.add_argument("--single-sample", action="store_true",
+                    help="issue n separate n=1 requests instead of one n-sample request "
+                         "(the GB10 hangs on high-concurrency multi-sample n>1 inference)")
+    ap.add_argument("--system", default="none", choices=["cp_method", "expert", "none"],
+                    help="system prompt for eval (match training: iteration-03 used cp_method)")
     ap.add_argument("--base-url", default="http://localhost:8000/v1")
     ap.add_argument("--wandb", action="store_true")
     args = ap.parse_args()
+    import sdpo_ojbench as _S
+    SYSTEM = _S.SYSTEM_PROMPTS[args.system]
     ks = [int(x) for x in args.ks.split(",")]
 
     client = OpenAI(base_url=args.base_url, api_key="EMPTY", timeout=2400)
@@ -66,29 +73,35 @@ def main():
             if pid in pmap:
                 tasks.append((lang, pid, pmap[pid]))
 
+    sys_msg = [{"role": "system", "content": SYSTEM}] if SYSTEM else []
+
+    def _judge(text, pid, lang):
+        # Eval needs only the VERDICT, so use early-exit (binary): a failing solution
+        # stops at the smallest failing case and never reads the huge cases (some
+        # held-out problems ship 100s of MB). Verdict is identical to fraction mode.
+        _, verdict, _ = judge_completion(text, int(pid), which="private", language=lang,
+                                         reward_mode="binary")
+        return verdict
+
     def one(t):
         lang, pid, prompt = t
-        # n samples in a single request (vLLM shares the prefill across them)
-        resp = client.chat.completions.create(
-            model=args.served_model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=args.temperature, top_p=args.top_p,
-            max_tokens=args.max_tokens, n=args.n,
-        )
+        msgs = sys_msg + [{"role": "user", "content": prompt}]
         verdicts = []
-        n_ac = 0
-        for ch in resp.choices:
-            text = ch.message.content or ""
-            # Eval needs only the VERDICT, so use early-exit (binary): a failing solution
-            # stops at the smallest failing case and never reads the huge cases (some
-            # held-out problems ship 100s of MB). Verdict is identical to fraction mode;
-            # this is what keeps eval from timing out. AC still runs all cases (rare).
-            _, verdict, _ = judge_completion(text, int(pid), which="private", language=lang,
-                                             reward_mode="binary")
-            verdicts.append(verdict)
-            n_ac += int(verdict == "AC")
+        if args.single_sample:
+            # n separate n=1 requests — avoids the GB10 multi-sample (n>1) hang.
+            for _ in range(args.n):
+                r = client.chat.completions.create(
+                    model=args.served_model, messages=msgs, temperature=args.temperature,
+                    top_p=args.top_p, max_tokens=args.max_tokens, n=1)
+                verdicts.append(_judge(r.choices[0].message.content or "", pid, lang))
+        else:
+            resp = client.chat.completions.create(
+                model=args.served_model, messages=msgs, temperature=args.temperature,
+                top_p=args.top_p, max_tokens=args.max_tokens, n=args.n)
+            verdicts = [_judge(ch.message.content or "", pid, lang) for ch in resp.choices]
+        n_ac = sum(v == "AC" for v in verdicts)
         return {"id": pid, "language": lang, "difficulty": DIFF_BY_ID[pid],
-                "n": len(resp.choices), "n_ac": n_ac, "verdicts": verdicts}
+                "n": len(verdicts), "n_ac": n_ac, "verdicts": verdicts}
 
     results = []
     with ThreadPoolExecutor(max_workers=args.concurrency) as ex:

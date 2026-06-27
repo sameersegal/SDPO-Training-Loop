@@ -159,8 +159,10 @@ The escalation ladder, cheapest first: **unit tests** (`pytest tests/`, seconds,
   generation+judging timing, the parallel judge path, a checkpoint write, and resume) — ~15 min / ~$1
   vs the ~$18 of late-caught false starts.
 - **Apply known hazards by default.** Bake mitigations we've already paid to learn into the default
-  launch path (enforce_eager for the kernel hang, preflight-all-testdirs, decoupled launch, `--resume`)
-  so they aren't rediscovered at $3–5 each.
+  launch path (enforce_eager for the kernel hang, preflight-all-testdirs, group-kill judge timeouts,
+  decoupled launch, `--resume`, and the **no-progress watchdog** that auto-kills a silent hang in
+  minutes) so they aren't rediscovered at $3–10 each. **Time hurts more than cost** — a silent hang
+  burns hours of wall-clock; the watchdog + resume turn that into a minutes-long auto-kill + restart.
 - **Balance against speed:** the goal is correct results *quickly*. Don't gold-plate — skip a redundant
   Modal smoke when a GB10 smoke already exercised the same path, and prefer one well-instrumented long
   run (checkpoints, W&B, eval-ready) over several timid short ones. When unsure of per-step cost, launch

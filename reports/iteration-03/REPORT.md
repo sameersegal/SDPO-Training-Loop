@@ -187,6 +187,28 @@ group has zero GRPO advantage but **still gets the SDPO feedback-distillation si
 problems are dead for the policy gradient, not necessarily for the feedback teacher; whether to keep
 them is an open decision (below).
 
+## Pre-launch de-risk ledger (time hurts more than cost — derisk every assumption first)
+The first full-run attempt cost ~$30 across SIX integration failures, each a different
+untested assumption caught the expensive way. Before re-launching, every assumption is now
+tested at the cheapest sufficient fidelity (unit/GB10 = free):
+
+| Assumption | How de-risked | Status |
+|---|---|---|
+| Judging keeps up per step | parallel ThreadPool + Modal `cpu=16`; calibrated 7.2× | ✅ |
+| All 206 testdirs on the volume | `train()` preflight asserts each `init.yml` | ✅ (caught the ICPC gap) |
+| Test extraction is concurrency-safe | lock + atomic rename; 16-thread test → 0 errors | ✅ |
+| Colocate vLLM generates (no CUDA hang) | `enforce_eager`; reached step 12 (past the step-0 hang) | ✅ |
+| Run survives session teardown | `setsid+nohup+--detach`, client exits clean | ✅ |
+| Judge can't hang on pathological output | group-kill on timeout; fork/pipe regression test → TLE 4s | ✅ |
+| Checkpoints write **and resume** works | GB10 2-phase test: killed after ckpt-2 → `--resume` continued 3→4 | ✅ |
+| Any *residual/unknown* hang is bounded | no-progress watchdog: kill at 15m stall / 25m startup, commit + resumable | ✅ code |
+| Per-step cost/time | actuals: ~$0.70/step, ~250s/step (`modal_cost.py`) | ✅ known |
+
+**Only-on-Modal residual:** the watchdog logic runs only in the Modal `train()` wrapper, so it's
+unproven *in situ*. Recommended final step before the step-20 run: one **watchdog-protected Modal
+pre-flight** — `--max-steps 3 --save-steps 1` (~15 min, ~$2, auto-killed if it hangs) — validates the
+real environment (kernel, colocate, real judging, a checkpoint write) **and** the watchdog itself.
+
 ## Plan of record (run order, once finalized)
 1. **Promote the full split** to the live config (point training/eval at `ojb_splits_full.json` / 206).
 2. **Reachability probe** — base pass@16/32 fractional over 80 train-pool hard → `data/hard_reachable.json`.

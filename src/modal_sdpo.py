@@ -320,8 +320,14 @@ def evaluate(which: str):
     secrets=[modal.Secret.from_name("huggingface"), modal.Secret.from_name("wandb")],
     timeout=60 * 60,
 )
-def passk_one(which: str, languages: str = "python,cpp"):
-    """pass@k only (returns as soon as it finishes — no slow held-out/gsm8k tail)."""
+def passk_one(which: str, languages: str = "python,cpp",
+              adapter: str = "/root/app/sdpo_out", ojb_splits: str = "ojb_splits_full.json",
+              tag: str = ""):
+    """pass@k only (returns as soon as it finishes — no slow held-out/gsm8k tail).
+
+    adapter: LoRA dir to serve when which=='sdpo' (e.g. .../sdpo_out/checkpoint-20).
+    ojb_splits: which split's held-out to eval on (iteration-03 -> full 206-pool's 53).
+    """
     import json
     import os
     import subprocess
@@ -330,16 +336,18 @@ def passk_one(which: str, languages: str = "python,cpp"):
 
     os.chdir("/root/app")
     os.environ.setdefault("WANDB_PROJECT", APP_NAME)
+    os.environ["OJB_SPLITS"] = ojb_splits  # held-out comes from this split
+    outputs.reload()  # see checkpoints committed by the (possibly stopped) train run
     base = "google/gemma-4-E2B-it"
     serve = ["vllm", "serve", base, "--port", "8000", "--dtype", "bfloat16",
              "--max-model-len", "16384", "--gpu-memory-utilization", "0.85",
              "--max-num-seqs", "32"]
     if which == "sdpo":
-        serve += ["--enable-lora", "--lora-modules", "sdpo=/root/app/sdpo_out",
+        serve += ["--enable-lora", "--lora-modules", f"sdpo={adapter}",
                   "--max-lora-rank", "32"]
-        served, tag = "sdpo", "sdpo100"
+        served, tag = "sdpo", (tag or "sdpo")
     else:
-        served, tag = base, "base_modal"
+        served, tag = base, (tag or "base_modal")
 
     srv = subprocess.Popen(serve)
     for _ in range(180):
@@ -370,6 +378,31 @@ def passk_run(which: str = "sdpo", languages: str = "python", out: str = ""):
         json.dump(res, f, indent=2)
     print(f"[modal] wrote {fname}")
     print(json.dumps(res["summary"], indent=2))
+
+
+@app.local_entrypoint()
+def eval_checkpoint(checkpoint: str = "checkpoint-20", languages: str = "python",
+                    ojb_splits: str = "ojb_splits_full.json"):
+    """Held-out pass@k for base vs ONE checkpoint, in parallel — the cheap sanity check.
+      modal run src/modal_sdpo.py::eval_checkpoint --checkpoint checkpoint-20 --languages python
+    """
+    import json
+    adapter = f"/root/app/sdpo_out/{checkpoint}"
+    print(f"[modal] eval base vs {checkpoint} ({adapter}) on {ojb_splits} held-out, langs={languages}")
+    base_call = passk_one.spawn("base", languages, adapter, ojb_splits, "base")
+    sdpo_call = passk_one.spawn("sdpo", languages, adapter, ojb_splits, checkpoint.replace("-", ""))
+    base_res, sdpo_res = base_call.get(), sdpo_call.get()
+    for name, res in [("base", base_res), (checkpoint, sdpo_res)]:
+        with open(f"sdpo_passk_{name.replace('-', '')}.json", "w") as f:
+            json.dump(res, f, indent=2)
+    # compact comparison
+    print(f"\n=== held-out pass@k: base vs {checkpoint} ({languages}) ===")
+    for lang in languages.split(","):
+        bo = base_res["by_language"].get(lang, {}).get("overall", {})
+        so = sdpo_res["by_language"].get(lang, {}).get("overall", {})
+        print(f"  [{lang}] " + "  ".join(
+            f"pass@{k}: {bo.get(f'pass@{k}', 0):.3f}->{so.get(f'pass@{k}', 0):.3f}"
+            for k in (1, 2, 4, 8)))
 
 
 @app.local_entrypoint()

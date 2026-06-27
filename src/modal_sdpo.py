@@ -181,16 +181,15 @@ def train(args: list[str], num_gpus: int = 1, ojb_splits: str = "ojb_splits_full
 
     # --- No-progress watchdog -------------------------------------------------
     # The expensive failure mode is a SILENT hang (a generation deadlock or a judge
-    # that never returns) burning the GPU for hours with zero progress (cost us ~$10
-    # / ~2h once). Run the trainer as a Popen in its own session, tee its output, and
-    # treat any step-progress line ("X/100" or a metrics dict) as a heartbeat. If no
-    # progress for STALL seconds (after a STARTUP grace for model-load + first gen),
-    # kill the WHOLE process group — capping any hang at minutes, not hours.
+    # that never returns) burning the GPU for hours with ZERO output (cost ~$10/2h once).
+    # Heartbeat = ANY output line. A real hang produces no output at all, so "no line for
+    # STALL seconds" is a clean, format-independent signal (a healthy step prints metrics +
+    # tqdm well within STALL; model-load/first-gen also stream output). On stall, kill the
+    # whole process group. (Earlier bug: matched "/100" but the bar is "/N" — never flipped,
+    # so the startup grace expired mid-run and FALSE-fired on a healthy run.)
     import signal
-    STARTUP = int(os.environ.get("WATCHDOG_STARTUP_SECS", "1500"))   # 25 min: load + first step
-    STALL = int(os.environ.get("WATCHDOG_STALL_SECS", "900"))        # 15 min between steps
-    last = [time.time()]            # last progress time
-    started = ["no"]               # flips once we see the first progress line
+    STALL = int(os.environ.get("WATCHDOG_STALL_SECS", "1200"))   # 20 min of TOTAL silence
+    last = [time.time()]
     killed_by_watchdog = [False]
 
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -200,19 +199,16 @@ def train(args: list[str], num_gpus: int = 1, ojb_splits: str = "ojb_splits_full
         for line in proc.stdout:
             sys.stdout.write(line)
             sys.stdout.flush()
-            if "/100" in line or "'epoch'" in line or "saved adapter" in line:
-                last[0] = time.time()
-                started[0] = "yes"
+            last[0] = time.time()  # any output = alive
 
     def _watchdog():
         while proc.poll() is None:
             if stop.wait(30):
                 return
             idle = time.time() - last[0]
-            limit = STALL if started[0] == "yes" else STARTUP
-            if idle > limit:
-                print(f"[modal] WATCHDOG: no progress for {idle:.0f}s (>{limit}s, "
-                      f"started={started[0]}) — killing the hung run", flush=True)
+            if idle > STALL:
+                print(f"[modal] WATCHDOG: no output for {idle:.0f}s (>{STALL}s) "
+                      f"— killing the hung run", flush=True)
                 killed_by_watchdog[0] = True
                 try:
                     os.killpg(os.getpgid(proc.pid), signal.SIGKILL)

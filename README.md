@@ -14,6 +14,7 @@ data/                         # committed inputs: ojb_splits.json, ojbench_selec
 reports/                      # per-iteration results (committed): report + figures + data
   iteration-01/               #   REPORT.md, PROVENANCE.md, figures/, data/
   comparison/                 #   cross-iteration overlays (figures gitignored, regenerable)
+knowledge/                    # SDPO literature: papers citing SDPO, classified + abstracts, deep reads
 runs/                         # per-iteration raw outputs (gitignored) — see runs/README.md
 ojbench_data/                 # OJBench test cases (~2.7 GB, gitignored, re-fetchable)
 ```
@@ -26,6 +27,10 @@ ojbench_data/                 # OJBench test cases (~2.7 GB, gitignored, re-fetc
 | [`reports/iteration-01/REPORT.md`](./reports/iteration-01/REPORT.md) | **Iteration 01** — self-contained report with embedded graphs |
 | [`docs/MODAL.md`](./docs/MODAL.md) | **Cloud scale-up** — run training/eval on Modal H100/H200 |
 | [`docs/HANDOFF.md`](./docs/HANDOFF.md) | original next-steps handoff (executed — kept for history) |
+
+**Related literature:** [`knowledge/`](./knowledge/) tracks the papers that cite SDPO (the method we
+build on) — `citing_papers.csv` classifies each by relevance with its abstract inline, and
+`summary_*.md` are per-paper deep reads with a "how it applies here" section.
 
 ## Code (in `src/`)
 | File | Role |

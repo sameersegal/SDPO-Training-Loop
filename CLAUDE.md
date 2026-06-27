@@ -18,6 +18,7 @@ scripts/                 # local vLLM serve helpers (serve.sh, serve_vibe.sh)
 data/                    # committed inputs: ojb_splits.json, ojbench_selected.json
 reports/iteration-NN/    # COMMITTED per-iteration results: REPORT.md, PROVENANCE.md, figures/, data/
 reports/comparison/      # cross-iteration overlays (figures gitignored, regenerable)
+knowledge/               # SDPO literature: citing_papers.csv (classified + abstracts) + summary_*.md deep reads
 runs/iteration-NN/       # gitignored raw outputs (adapters, logs, raw eval JSONs)
 ojbench_data/            # OJBench test cases (~2.7 GB, gitignored, re-fetchable)
 ```
@@ -34,6 +35,7 @@ Kept current and authoritative; defer to them over inference. All in `docs/`:
 | `docs/MODAL.md` | Cloud scale-up (Modal H100/H200) |
 | `docs/HANDOFF.md` | Original handoff (executed, kept for history) |
 | `reports/iteration-NN/REPORT.md` | Self-contained per-iteration report with embedded graphs |
+| `knowledge/` | SDPO **literature**: `citing_papers.csv` (papers citing SDPO, classified by relevance + abstracts) and `summary_*.md` deep reads with a "how it applies here" section. Add a `summary_*.md` when you read a new paper. |
 
 When you change behavior, update the relevant doc in the same change.
 

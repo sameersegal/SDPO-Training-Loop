@@ -390,7 +390,7 @@ def passk_one(which: str, languages: str = "python,cpp",
     base = "google/gemma-4-E2B-it"
     serve = ["vllm", "serve", base, "--port", "8000", "--dtype", "bfloat16",
              "--max-model-len", "16384", "--gpu-memory-utilization", "0.85",
-             "--max-num-seqs", "32"]
+             "--max-num-seqs", "32", "--enforce-eager"]  # eager: dodge the kernel-4.19 gen hang
     if which == "sdpo":
         serve += ["--enable-lora", "--lora-modules", f"sdpo={adapter}",
                   "--max-lora-rank", "32"]

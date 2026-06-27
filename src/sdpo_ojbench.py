@@ -146,7 +146,7 @@ def augment_prompt_with_example(prompt, pid, language="python", which="public", 
 
 
 def judge_completion(text, pid, which="public", timeout=6.0, language="python",
-                     reward_mode="fraction"):
+                     reward_mode="fraction", max_case_bytes=None, max_cases=None):
     """Returns (reward, verdict, feedback_text). verdict in AC/WA/RE/TLE/CE/NO_CODE.
 
     reward_mode:
@@ -157,9 +157,24 @@ def judge_completion(text, pid, which="public", timeout=6.0, language="python",
       "binary": reward = 1.0 iff AC (all cases pass) else 0.0. Cheapest/strictest;
         but all-fail groups have zero variance -> no policy-gradient signal.
     AC always yields reward 1.0. Eval (pass@k / pass@1) keys on the VERDICT, not this
-    reward, so eval is unaffected by reward_mode."""
+    reward, so eval is unaffected by reward_mode.
+
+    max_case_bytes / max_cases bound the IN-LOOP reward to small, smallest-first cases.
+    Some OJBench problems ship multi-hundred-MB to 1.4 GB test sets (inputs up to 74 MB);
+    dense reward (count_all) runs EVERY case, so judging those across the per-step batch
+    grew unboundedly slow and eventually hung a step (binary reward early-exited before
+    reaching them, which is why this only bit with fraction reward). Capping to small cases
+    keeps the dense signal (fraction of small cases passed) while making judging cheap and
+    hang-proof. Eval keeps the FULL set (no caps) — it's not in the hot loop."""
     pub, prv = public_private_cases(pid)
     cases = pub if which == "public" else prv
+    if max_case_bytes or max_cases:
+        cases = sorted(cases, key=lambda c: c[0].stat().st_size)  # smallest first
+        if max_case_bytes:
+            small = [c for c in cases if c[0].stat().st_size <= max_case_bytes]
+            cases = small or cases[:1]  # always keep >=1 (the smallest) so total>0
+        if max_cases:
+            cases = cases[:max_cases]
     count_all = reward_mode == "fraction"
     if language == "cpp":
         verdict, passed, total, detail = judge_cpp(extract_code_cpp(text), cases, timeout, count_all=count_all)
@@ -261,6 +276,15 @@ def build_dataset(split="train", difficulties=None, languages=("python",), syste
     return Dataset.from_dict(rows)
 
 
+def reward_case_caps():
+    """In-loop reward case caps from env (keep judging cheap + hang-proof on huge test
+    sets). Defaults: cases ≤ 1 MB, at most 20 (smallest-first). 0/empty disables a cap."""
+    import os
+    mb = int(os.environ.get("SDPO_MAX_CASE_BYTES", "1000000")) or None
+    mc = int(os.environ.get("SDPO_MAX_CASES", "20")) or None
+    return mb, mc
+
+
 def make_reward_func(which="public", timeout=6.0, reward_mode="fraction"):
     """TRL reward_func(completions, **kwargs) -> list[float]. The 'id' and
     'language' dataset columns are forwarded by TRL via kwargs (per rollout).
@@ -268,10 +292,12 @@ def make_reward_func(which="public", timeout=6.0, reward_mode="fraction"):
 
     Judges the group's completions concurrently (subprocess judge releases the GIL);
     dense judging is the per-step bottleneck on hard problems. SDPO_JUDGE_WORKERS env
-    caps the pool (default 16). ex.map preserves order."""
+    caps the pool (default 16). ex.map preserves order. Cases are size/count-capped
+    (reward_case_caps) so multi-hundred-MB test sets can't stall a step."""
     import os
     from concurrent.futures import ThreadPoolExecutor
     workers = int(os.environ.get("SDPO_JUDGE_WORKERS", "16"))
+    mb, mc = reward_case_caps()
 
     def reward_func(completions, id=None, language=None, **kwargs):
         def judge_k(k):
@@ -279,7 +305,8 @@ def make_reward_func(which="public", timeout=6.0, reward_mode="fraction"):
             lang = language[k] if language is not None else "python"
             text = comp[-1]["content"] if isinstance(comp, list) else comp
             r, _, _ = judge_completion(text, int(id[k]), which=which, timeout=timeout,
-                                       language=lang, reward_mode=reward_mode)
+                                       language=lang, reward_mode=reward_mode,
+                                       max_case_bytes=mb, max_cases=mc)
             return float(r)
 
         n = len(completions)

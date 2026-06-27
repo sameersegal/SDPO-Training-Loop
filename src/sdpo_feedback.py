@@ -38,7 +38,9 @@ def make_feedback_reward_func(bus, which="public", timeout=6.0, reward_mode="fra
     """
     import os
     from concurrent.futures import ThreadPoolExecutor
+    from sdpo_ojbench import reward_case_caps
     workers = int(os.environ.get("SDPO_JUDGE_WORKERS", "16"))
+    mb, mc = reward_case_caps()  # cap in-loop cases (huge test sets stall/hang a step)
 
     def reward_func(completions, id=None, language=None, **kwargs):
         def judge_k(k):
@@ -46,7 +48,8 @@ def make_feedback_reward_func(bus, which="public", timeout=6.0, reward_mode="fra
             lang = language[k] if language is not None else "python"
             text = comp[-1]["content"] if isinstance(comp, list) else comp
             r, _, fb = judge_completion(text, int(id[k]), which=which, timeout=timeout,
-                                        language=lang, reward_mode=reward_mode)
+                                        language=lang, reward_mode=reward_mode,
+                                        max_case_bytes=mb, max_cases=mc)
             return float(r), fb
 
         n = len(completions)

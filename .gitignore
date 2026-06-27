@@ -50,3 +50,6 @@ adapter_it02/
 # raw diagnostic rollout dumps (regenerate via src/diagnose_hard.py / prompt_condition.py)
 reports/iteration-*/data/hard_rollouts.json
 reports/iteration-*/data/prompt_condition.json
+
+# regenerable static export of the papers CSV (src/knowledge_view.py --out)
+knowledge/papers.html

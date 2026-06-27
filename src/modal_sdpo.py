@@ -26,6 +26,7 @@ import modal
 
 APP_NAME = "sdpo-gemma-ojbench"
 PYTHON_VERSION = "3.12"
+MODEL_ID = "google/gemma-4-E2B-it"  # gated; staged into hf-cache at BUILD time (off-GPU)
 
 SRC = Path(__file__).resolve().parent           # repo/src
 REPO = SRC.parent                                # repo root
@@ -35,6 +36,26 @@ DATA = REPO / "data"
 _CODE = ["_paths.py", "ojbench_eval.py", "sdpo_ojbench.py", "sdpo_train.py",
          "sdpo_feedback.py", "sdpo_passk.py", "sdpo_eval_vllm.py", "eval_runner.py"]
 _DATA = ["ojb_splits.json", "ojb_splits_full.json", "ojbench_selected.json"]
+
+# Persistent volumes: model weights cache, the 2.7 GB test cases, adapter outputs.
+# Defined before the image so the build-time weight prefetch can mount hf_cache.
+hf_cache = modal.Volume.from_name("hf-cache", create_if_missing=True)
+ojbench_data = modal.Volume.from_name("ojbench-data", create_if_missing=True)
+outputs = modal.Volume.from_name("sdpo-outputs", create_if_missing=True)
+
+
+def _prefetch_weights():
+    """Stage the gated gemma-4 weights into the hf-cache volume at IMAGE-BUILD time,
+    on Modal's cheap CPU builder — NOT on the billed GPU. Before this, the first GPU
+    run per cache-lifetime burned idle H100/H200 minutes pulling ~10 GB from HF
+    (the dataset was already on a volume; the model was the one thing still
+    downloaded on the GPU). snapshot_download is a no-op once the volume is warm, so
+    rebuilds just verify. Runs with HF_HUB_ENABLE_HF_TRANSFER=1 baked into the image."""
+    import os
+
+    from huggingface_hub import snapshot_download
+
+    snapshot_download(MODEL_ID, token=os.environ.get("HF_TOKEN"))
 
 # CUDA *devel* base: flashinfer JIT-compiles kernels at runtime and needs nvcc.
 # Versions pinned to match the validated GB10 venv exactly.
@@ -55,12 +76,14 @@ image = (
         "datasets==5.0.0",
         "flashinfer-python==0.6.12",
         "wandb==0.28.0",
+        "hf_transfer==0.1.8",  # parallel-stream HF downloads: ~10 GB gemma-4 pull is the
+                               # bottleneck when it happens; single-stream left the GPU idle
     )
     .env(
         {
             "TRL_EXPERIMENTAL_SILENCE": "1",
             "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
-            "HF_HUB_ENABLE_HF_TRANSFER": "0",
+            "HF_HUB_ENABLE_HF_TRANSFER": "1",  # fast multi-stream download (hf_transfer pinned above)
         }
     )
 )
@@ -71,12 +94,15 @@ for _f in _CODE:
 for _f in _DATA:
     image = image.add_local_file(str(DATA / _f), f"/root/app/{_f}")
 
-app = modal.App(APP_NAME)
+# Pull gemma-4 into the hf-cache volume during BUILD (cheap CPU builder), so no GPU
+# function ever spends billed time downloading weights. Needs the gated-access token.
+image = image.run_function(
+    _prefetch_weights,
+    secrets=[modal.Secret.from_name("huggingface")],  # -> HF_TOKEN
+    volumes={"/root/.cache/huggingface": hf_cache},
+)
 
-# Persistent volumes: model weights cache, the 2.7 GB test cases, adapter outputs.
-hf_cache = modal.Volume.from_name("hf-cache", create_if_missing=True)
-ojbench_data = modal.Volume.from_name("ojbench-data", create_if_missing=True)
-outputs = modal.Volume.from_name("sdpo-outputs", create_if_missing=True)
+app = modal.App(APP_NAME)
 
 # ojbench_data volume holds ".../ojbench_data" contents at "/ojbench_data";
 # the judge expects them under /root/app/ojbench_data (ROOT/ojbench_data/NOI/...).

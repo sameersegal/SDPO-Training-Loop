@@ -26,8 +26,9 @@ All commands use the venv's CLI: `.venv/bin/modal` (or activate the venv first).
 ## Run
 
 ```bash
-# Smoke test first — 2 steps, validates image + data + judge end-to-end (~5-10 min,
-# most of which is the one-time gemma-4 download into the hf-cache volume).
+# Smoke test first — 2 steps, validates image + data + judge end-to-end. The gemma-4
+# weights are staged into hf-cache at IMAGE-BUILD time (off-GPU), so this no longer
+# pays a ~10 GB download on the billed GPU — the first *build* absorbs it instead.
 .venv/bin/modal run src/modal_sdpo.py --smoke
 
 # Real run — the scaled experiment the GB10 can't do quickly
@@ -47,7 +48,11 @@ Flags (see `main()` in `src/modal_sdpo.py`): `--gpu` (H100/H200/A100-80GB), `--d
 Then evaluate locally exactly as before (serve via vLLM `--enable-lora --lora-modules sdpo=./sdpo_out_modal`).
 
 ## Notes / gotchas
-- **First run is slow** — it downloads gemma-4 (~10 GB, gated) into the `hf-cache` volume; later runs reuse it.
+- **Weights are prefetched at build, not on the GPU** — `image.run_function(_prefetch_weights, …)`
+  pulls gemma-4 (~10 GB, gated) into the `hf-cache` volume during the image build (cheap CPU
+  builder, `hf_transfer` parallel download). No GPU function ever burns billed H100/H200 time
+  downloading weights; the first *build* absorbs it once and is a no-op (verify) on rebuilds.
+  This needs the `huggingface` secret to exist before the first build.
 - **Empty-data trap** — if you skip the `volume put`, every rollout scores 0 with no error. The
   function asserts the test-case dir is non-empty up front to catch this.
 - **On a dedicated GPU the GB10 memory workarounds relax** — `--vllm-gpu-util` defaults to 0.45 here

@@ -469,3 +469,46 @@ def run_eval():
                 json.dump(content, f, indent=2)
             print(f"  wrote {fname}")
     print("[modal] eval complete — see sdpo_passk_*.json, sdpo_eval_*.json, results_gsm8k_*.json")
+
+
+# ---------------------------------------------------------------------------
+# Pre-warm model weights into the hf-cache volume on a CPU-only container.
+# Downloading is GPU-free; doing it here means the first H200 train/eval run
+# starts with Qwen3-8B already on disk instead of paying ~16 GB of download at
+# H200 rates. The hf-cache volume persists, so this is a one-time cost per model.
+# ---------------------------------------------------------------------------
+@app.function(
+    image=image,
+    volumes={"/root/.cache/huggingface": hf_cache},   # only the weights cache; no GPU
+    secrets=[modal.Secret.from_name("huggingface")],  # harmless; Qwen3-8B is ungated
+    timeout=60 * 60,
+)
+def prewarm_weights(model: str = "Qwen/Qwen3-8B"):
+    """Download `model`'s weights into the hf-cache volume (no GPU). Idempotent:
+    snapshot_download skips files already present, so re-running is cheap."""
+    import os
+    from huggingface_hub import snapshot_download
+
+    hf_cache.reload()
+    print(f"[prewarm] downloading {model} into hf-cache volume ...", flush=True)
+    path = snapshot_download(
+        repo_id=model,
+        # bf16 safetensors weights + configs/tokenizer; skip duplicate .bin/.pth.
+        ignore_patterns=["*.pt", "*.pth", "*.bin", "original/*", "*.gguf"],
+    )
+    hf_cache.commit()
+    files = sorted(os.listdir(path))
+    total = sum(os.path.getsize(os.path.join(path, f))
+                for f in files if os.path.isfile(os.path.join(path, f)))
+    print(f"[prewarm] done: {path}\n[prewarm] {len(files)} files, "
+          f"{total / 1024**3:.2f} GiB resolved in snapshot", flush=True)
+    print(f"[prewarm] files: {files}", flush=True)
+    return {"model": model, "path": path, "num_files": len(files),
+            "snapshot_gib": round(total / 1024**3, 2)}
+
+
+@app.local_entrypoint()
+def prewarm(model: str = "Qwen/Qwen3-8B"):
+    """modal run src/modal_sdpo.py::prewarm --model Qwen/Qwen3-8B"""
+    res = prewarm_weights.remote(model)
+    print(f"[modal] prewarm complete: {res}")

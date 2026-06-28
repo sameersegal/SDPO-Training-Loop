@@ -115,6 +115,22 @@ Figures: `python src/generate_slides.py` (set `ITER=iteration-NN`); cross-iterat
   Free GPU memory before relaunching (128 GB *unified*). H100 (80 GB) uses `0.25`; H200 (≥141 GB) fits
   `--no-grad-checkpointing`. **The GB10 also hangs on high-concurrency multi-sample (n>1) inference** →
   run pass@k eval on Modal.
+- **Generate with vLLM, NEVER transformers `model.generate()`.** Sequential HF decoding on the GB10 is
+  ~10 tok/s — a single thinking-ON rollout (8k+ tokens) takes **~14 min**, so a 12-rollout probe set is
+  *hours*, most of it wasted. vLLM (the same engine the serve/eval path already uses — `enforce_eager`
+  + `n=1` to dodge the multi-sample hang above) batches and is ~10–30× faster. `gen_rollouts.py
+  --engine vllm` is the fast path; `probe_teacher_accuracy.py`'s transformers `generate()` is the trap
+  that cost us a wasted run. **Corollary: don't cap thinking-ON generation tight** — Qwen3-8B think-ON
+  blew past an 8192 cap and returned **NO_CODE even on an *easy* problem** (the whole budget went to
+  `<think>`); use ≥16k or uncapped, or the rollout is unusable.
+- **Stream results to disk as each one is produced — NEVER buffer-all-then-write.** A single batched
+  `llm.generate(all_prompts)` (or any "collect in a list, dump at the end") returns only after
+  *everything* finishes: **zero live visibility** (you can't tell steady progress from a hang) and
+  **zero resumability** (an interruption loses the whole batch). Generate→judge **per item in a loop,
+  writing the JSON after each** (`gen_rollouts.py` `record()`), and support `--resume` to skip items
+  already in the output file. On the GB10 batching buys ~nothing anyway (aggregate ~14 tok/s ≈
+  single-stream ~13), so per-request write-as-you-go costs no throughput while giving progress you can
+  watch and a run you can restart. Same rule for eval sweeps.
 - **Serve the adapter via `vllm --enable-lora`, NOT a merged checkpoint.** `merge_and_unload` on this
   multimodal model silently drops upper-layer `k_norm` weights → vLLM "weights not initialized". Eval
   base and adapter on the *same* server for a clean delta.

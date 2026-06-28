@@ -47,6 +47,13 @@ def main():
                     help="dense passed/total (default) or strict AC=1/else 0")
     ap.add_argument("--feedback", action="store_true",
                     help="live per-rollout judge feedback into the SDPO teacher (iteration 02)")
+    ap.add_argument("--critic", action="store_true",
+                    help="replace deterministic feedback with an LLM trace-aligned critique "
+                         "(iteration 06; implies --feedback; needs ANTHROPIC_API_KEY)")
+    ap.add_argument("--critic-model", default=None,
+                    help="critic model id (default: sdpo_critic.DEFAULT_CRITIC_MODEL)")
+    ap.add_argument("--critic-thinking", action="store_true",
+                    help="use adaptive thinking for the critic (higher quality, slower/costlier)")
     # Memory/speed knobs. Defaults are GB10-safe (microbatch=1 + grad ckpt).
     # On a roomier GPU (80 GB H100), --per-device-batch 2+ and/or
     # --no-grad-checkpointing trade memory for a faster step.
@@ -69,6 +76,8 @@ def main():
     ap.add_argument("--no-enforce-eager", dest="enforce_eager", action="store_false")
     ap.add_argument("--no-wandb", action="store_true")
     args = ap.parse_args()
+    if args.critic:
+        args.feedback = True  # the critic rewrites the live feedback signal; it needs the bus
 
     # Inject enforce_eager into TRL's colocate vLLM (it doesn't expose the flag in
     # colocate mode — only the server path does). Patch the LLM symbol TRL calls.
@@ -108,7 +117,9 @@ def main():
     bus = None
     if args.feedback:
         bus = FeedbackBus()
-        reward = make_feedback_reward_func(bus, which="public", timeout=6.0, reward_mode=args.reward_mode)
+        reward = make_feedback_reward_func(bus, which="public", timeout=6.0, reward_mode=args.reward_mode,
+                                           critic=args.critic, critic_model=args.critic_model,
+                                           critic_thinking=args.critic_thinking)
     else:
         reward = make_reward_func(which="public", timeout=6.0, reward_mode=args.reward_mode)
 
@@ -192,7 +203,8 @@ def main():
               f"{'RESUMING from latest' if resume else 'none found, starting fresh'}")
 
     print(f"[sdpo] training: {len(ds)} problems, max_steps={args.max_steps}, "
-          f"G={args.num_generations}, feedback={args.feedback}, resume={resume}, report_to={report_to}")
+          f"G={args.num_generations}, feedback={args.feedback}, critic={args.critic}, "
+          f"resume={resume}, report_to={report_to}")
     trainer.train(resume_from_checkpoint=resume)
     trainer.save_model(args.output_dir)
     print(f"[sdpo] saved adapter to {args.output_dir}")

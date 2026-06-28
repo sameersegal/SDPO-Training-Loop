@@ -7,7 +7,9 @@ telemetry, gated behind a logprob check that the self-teacher actually knows som
 is **not** required here — proving the method has signal at 8B, and that our pipeline runs on it
 without collapse/OOM/hang, is the deliverable. Downstream actions are decided *after* this run.
 
-Consolidated recommendations this executes: [iteration 04](../iteration-04/REPORT.md) (the T0 list).
+Consolidated recommendations this executes: the **T0 list distilled from the 10
+[`knowledge/`](../../knowledge/) deep reads** (cross-paper consensus on fixed teacher, demoted
+distillation, collapse canaries, trace-aligned feedback). The T0 knobs are inlined in Phase 2 below.
 
 ---
 
@@ -100,7 +102,7 @@ best in-context priors for. (`src/sdpo_feedback.py` `_LiveFeedbackBuilder`, `_fo
 
 ## Phase 2 — The 20-step run (Modal H200) with T0 baked in
 
-**T0 knobs (iteration-04 §T0):**
+**T0 knobs (distilled from the `knowledge/` deep reads):**
 - **T0-2 — Fixed teacher.** `teacher_model_kind` = **fixed/initial**, not EMA. For a *first clean
   run* this minimizes moving parts (6-paper consensus that EMA amplifies collapse). The EMA-α≈0.01
   A/B is a deliberate downstream experiment, not for run #1.

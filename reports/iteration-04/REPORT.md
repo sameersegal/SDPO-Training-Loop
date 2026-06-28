@@ -1,168 +1,148 @@
-# Iteration 04 — Consolidated paper recommendations (rank-ordered for a <24h run)
+# Iteration 04 — Per-token advantage diagnostic: is our teacher signal localized or diffuse?
 
-**Status: PLANNED / planning doc.** This is not an experiment report yet — it consolidates the
-**10 deep reads in `knowledge/`** into one rank-ordered action list and picks what to actually do in
-the **<24-hour** window we have to show something substantial. It supersedes the scattered
-"things to try" lists at the bottom of each `summary_*.md`.
+**Status: DONE (diagnostic, no training).** A measurement iteration, not a run. It recreates
+**Figure 4 of "The Role of Feedback Alignment in Self-Distillation"** (arXiv 2606.11173; deep read:
+[`knowledge/summary_feedback_alignment_sd.md`](../../knowledge/summary_feedback_alignment_sd.md))
+for **our** base model, to answer a question we'd never actually looked at: *does the context we feed
+the SDPO self-teacher produce a **localized** credit signal (StepAlignFB — good) or a **diffuse** one
+(RefSol — fights correct code)?* This is **diagnostic #3** from that summary.
 
-Builds on [iteration 01](../iteration-01/REPORT.md) (real base pass@k frontier; 100-step easy-only
-**collapse**), [iteration 02](../iteration-02/REPORT.md) (live feedback **stopped the collapse**, did
-not beat base), and [iteration 03](../iteration-03/REPORT.md) (moving-frontier curriculum + dense
-reward + 206-pool — **de-risked but not yet run**; open decisions still open).
-
----
-
-## The strategic call (read this first)
-
-With **<24h**, the deliverable is **one well-instrumented curriculum run that either beats base on
-held-out pass@k or produces a clean, publishable null** — not a new trainer. So the prioritization is
-ruthlessly **gain × feasibility-in-24h**, which pushes the big architectural papers (SD-Zero,
-RLCSD, NCA) to iteration-05 and pulls *cheap single-knob changes + near-free instrumentation* to the
-front. Crucially, **the free diagnostics turn even a null result into a finding** — that is the
-insurance that makes the 24h non-wasted regardless of which way pass@k moves.
-
-**The make-or-break gate, do it first (§T0-1):** the original SDPO paper's scaling curve says SDPO's
-edge over GRPO *vanishes or reverses below ~8B* and Gemma-4-E2B is a ~2B-class model. If the
-self-teacher is **not** more accurate than the student on our problems+feedback, SDPO has **nothing to
-distill at our scale** — and *that* is itself the substantial result. Measure it before paying for a
-long run.
+**Compute:** local GB10, HF transformers (teacher-forced, no training). **No W&B, no Modal, no spend.**
+Builds on [iteration 02](../iteration-02/REPORT.md) (live judge feedback into the teacher) and the
+literature read above.
 
 ---
 
-## Cross-paper consensus (why these are high-conviction)
+## 1. What the paper's graph means (and why we care)
 
-Ten papers, read independently, converge on the same handful of levers. The vote counts are the
-signal — these are not one-paper hunches:
+Self-distillation gives dense per-token credit by matching a **student** (sees only the question `x`)
+to a **self-teacher** (sees `x` **plus** a privileged context `c`). The per-token advantage is
 
-| Lever | Papers that vote for it | Our current state | Cost |
-|---|---|---|---|
-| **Teacher should be FIXED / periodically-refreshed, not continuous EMA** | selfdistill_degrades, SDPG, feedback_alignment, opd_length_inflation, rlcsd, SD-Zero (**6**); original SDPO dissents *only* for small-α EMA on code | `teacher_model_kind="ema"`, α unknown (`sdpo_train.py:133`) | 1 knob |
-| **Distillation must be a small, scheduled, verifier-dominated nudge — not the objective** | SDPG ("single highest-leverage"), rlcsd (modulate, don't replace), opd_length_inflation, original SDPO (hybrid λ≈0.9) | `distillation_weight=1.0` "pure" (`sdpo_train.py:130`), unscheduled | 1 knob + schedule callback |
-| **Add a frozen-base KL anchor** | SDPG, opd_length_inflation, when_context_returns (NCA variant); iter-02/03 plan already lists it | **not wired** (no `--kl` flag) | small |
-| **Two-sided length/entropy/trunc/rep canary as a kill signal** | opd_length_inflation, SDPG, rlcsd, selfdistill_degrades, when_context_returns | length logged; `finish_reason` captured but not aggregated | ~free |
-| **Feedback should be trace-aligned (anchor correct prefix, localize the fix), not a fresh solution** | feedback_alignment (headline), SD-Zero (verdict-keyed P_r), original SDPO (LeetCode-shaped) | outcome-aligned only (`_format_feedback`, `sdpo_ojbench.py:182`) | prompt logic |
-| **Broaden coverage to the learnability frontier (mixed-variance groups)** | every paper; SDPG/feedback_alignment make it the filter | **implemented** (dense reward, solvability probe) | done |
-| **Use the failed rollouts as a contrastive negative** | rlcsd (headline) | thrown away (positive-only teacher) | new trainer |
-| **Self-teacher edge shrinks at small scale → SDPO+GRPO hybrid as insurance** | original SDPO | pure SDPO | depends on TRL |
+> **A_t = log π(ŷ_t | x, c, ŷ_<t) − log π(ŷ_t | x, ŷ_<t)**
 
----
+— the *same model* scoring the *same rollout tokens* `ŷ` twice, with and without the context. A_t is
+literally the credit SDPO's loss uses. **Red (A_t>0)** = the context made the model more confident in
+the token the student wrote → "keep it." **Blue (A_t<0)** = less confident → "change it." So **the
+content and placement of `c` is the entire learning signal.**
 
-## Rank-ordered recommendations
+The paper's Fig. 4 plots A_t along one rollout for two contexts:
+- **(i) StepAlignFB** — a critique that copies the student's correct steps verbatim and rewrites only
+  the wrong one → a **sharp, localized blue cliff at the error**, red/zero on the correct prefix. A
+  free process-reward model.
+- **(ii) RefSol** — an independent correct solution → **diffuse blue across the whole rollout, even on
+  correct steps**, because the canonical solution phrases everything differently. It conflates "you
+  erred here" with "I'd have written it differently."
 
-Ranked by **(expected gain on held-out pass@k or on the publishable story) × (feasibility in 24h)**.
-T0 = do before launch (hours, near-free). T1 = cheap, do if time. T2 = the run itself. T3 = deferred
-to iteration-05 (too big to build+smoke+Modal in 24h).
+**Why us:** iteration-02 wired live judge feedback into the teacher. This paper is the theory of *what
+makes that help vs. do nothing* — and we'd never measured which regime our signal is in.
 
-### T0 — Before launch: near-free, foundational, high-conviction
+## 2. What we plotted — exactly our latest teacher context
 
-**T0-1. Self-teacher-vs-student accuracy probe — THE GATE.**
-*Gain: decisive / Cost: ~1h, free.* Take a handful of failed OJBench rollouts, hand the model the
-judge feedback in the reprompt template, and measure the **teacher's one-shot accuracy vs the
-student's**. If the teacher is not meaningfully better, SDPO has no signal at Gemma-E2B scale →
-**stop and report that** (a real result; predicted by the original SDPO scaling curve, Fig. 8).
-Reuses the existing rollout + `judge_completion()` path. *(original SDPO)*
+Recreation script: [`src/plot_token_advantage.py`](../../src/plot_token_advantage.py). For each
+difficulty we sample a **group of 8 base rollouts** (G=8, temp 1.0, top-p 0.95, **8192-token budget**,
+`CP_METHOD_SYS`, `OJB_SPLITS=ojb_splits_full.json` — the iteration-03 universe), judge each, then
+build the teacher context with the **exact gating of our latest run** (`sdpo_prompts.decide_inputs`;
+`use_successful_as_teacher`, `success_reward_threshold=1.0`, `include_environment_feedback`,
+`environment_feedback_only_without_solution`):
 
-**T0-2. Teacher EMA → fixed (or pin α≈0.01 and verify).**
-*Gain: high / Cost: 1 knob.* The **single most-voted change (6 papers)**. EMA *amplifies* the
-collapse feedback loop (confident → teacher → more confident). Switch `teacher_model_kind` to
-fixed-initial, or — if we keep EMA — first **confirm what α TRL actually uses** and pin it ≈0.01
-(the original paper's value; under-regularized EMA is the dangerous case). `sdpo_train.py:133`.
-*(selfdistill_degrades, SDPG, feedback_alignment, opd_length_inflation, rlcsd, SD-Zero)*
+- **group has an AC rollout** → `c` = that **AC group-mate's full code** (the `solution` slot).
+- **all-fail group** → `c` = our **judge feedback** (`_format_feedback`: `Verdict … Passed X/Y …
+  Failing test … Input … Expected … Got …`).
+- A **partial-pass attempt is never the context** — only a full AC fills the solution slot (the
+  pass-rate `16/20` appears only as *text* inside feedback on all-fail groups).
 
-**T0-3. Demote distillation: weight 1.0 → ~1e-2, verifier-dominant, + warmup-decay schedule.**
-*Gain: high / Cost: 1 knob + a `TrainerCallback`.* Called out as "probably the single highest-leverage
-change." `distillation_weight=1.0` is ~100–1000× too strong relative to SDPG's β≈1e-3 with the
-**outcome reward as the O(1) primary term**. Drop it 1–3 orders of magnitude and ramp 0→small→0
-(`T_warm`≈first 10–15% of steps, decay to 0 near the end). `sdpo_train.py:130`.
-*(SDPG, rlcsd, opd_length_inflation, original SDPO)*
+This makes the difficulty axis sweep the paper's two arms automatically: **easy → solution/RefSol arm**
+(base AC'd it), **medium/hard → feedback arm** (all-fail).
 
-**T0-4. Two-sided collapse canary (length + TruncRate + RepRate + entropy).**
-*Gain: high on the *story* / Cost: ~free.* Iteration-01 collapsed *terse*; opd_length_inflation
-collapses *verbose* — same failure class, opposite sign, and **the loss is blind to both**. Aggregate
-`finish_reason=="length"` → TruncRate (already captured, `sdpo_eval_vllm.py:57`); zlib-compress the
-last 10k chars → RepRate (~5 lines); log policy entropy per step. Treat a sharp move in **either**
-length direction (or an entropy crash) as an early kill signal in the "watch the first few steps"
-budget rule. **This is what makes a null run publishable.** *(opd_length_inflation, SDPG, rlcsd,
-selfdistill_degrades)*
+![Per-token SDPO advantage, easy/medium/hard](figures/token_advantage.png)
 
-### T1 — Cheap, high-value, do if time before/with the launch
+*Per-token advantage A_t for base Gemma-4-E2B on one easy / medium / hard problem, using the exact
+context our pipeline feeds. Red = keep, blue = change; dashed line = start of the code block. Note the
+**y-axis scales differ ~20×** between panels.*
 
-**T1-1. Measure context-induced harm on the existing iter-01/02 adapters — NO retraining.**
-*Gain: high on the story / Cost: an eval variant, free.* Run held-out problems twice — as deployed
-(no context) and with the solution/feedback re-fed (as the teacher saw it). Compute
-**Harm = P(fail-with-context | pass-without-context)**, Acc_x vs Acc_x,c, Δlen. If iter-01 sits in
-Regime A (high harm), that's independent confirmation our collapse is context-induced degradation —
-a clean diagnostic finding with zero training cost. *(when_context_returns)*
+## 3. Results
 
-**T1-2. Frozen-base KL anchor (β small).**
-*Gain: medium-high / Cost: small.* Already in the iter-02/03 plan, **not yet wired**. Caps policy
-drift, protects easy + GSM8K (iter-01's regression). KL alone is a "modest patch" (opd_length: 28.0→
-29.7) — the heavy lifting is the mixture/curriculum we already have — but it's cheap regression
-insurance. *(SDPG, opd_length_inflation)*
+| difficulty | problem | verdict (reward) | context `c` | n_tok | % neg | mean A_t | **mean \|A_t\|** | min | reasoning \|A\| | code-region \|A\| |
+|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| easy | loj-2314 | **AC** (1.00) | solution (AC group-mate) | 762 | 45% | **−0.381** | **0.449** | −21.6 | 0.559 | 0.178 |
+| medium | loj-2086 | TLE (0.67) | feedback (judge) | 2377 | 34% | −0.000 | **0.022** | −3.4 | 0.027 | 0.013 |
+| hard | loj-2083 | TLE (0.70) | feedback (judge) | 4859 | 39% | −0.001 | **0.019** | −1.4 | 0.022 | 0.006 |
 
-**T1-3. Trace-aligned, verdict-keyed feedback.**
-*Gain: medium-high / Cost: prompt-assembly, unit-testable.* Upgrade `_format_feedback`
-(`sdpo_ojbench.py:182`) toward StepAlignFB for code: include the **student's own code verbatim up to
-the failing region**, then **describe (don't paste)** the buggy tail + the failing input/expected/got;
-make the control phrase verdict-specific ("WA on test 3, fix it" / "TLE, make it faster"). The sharp
-rule: **never quote the *erroneous* span verbatim** (induction-head copying reinforces the bug). Near-
-miss mediums (passed 16/20) are the ideal case. Pure logic → unit test, no Modal. *(feedback_alignment,
-SD-Zero, original SDPO)*
+(Full per-token arrays: [`data/token_advantage.json`](data/token_advantage.json); stats:
+[`data/token_advantage_stats.csv`](data/token_advantage_stats.csv).)
 
-**T1-4. Audit the reprompt template for the known footgun.**
-*Gain: prevents a silent regression / Cost: a code read.* Verify the teacher prompt does **not** paste
-the student's raw attempt into the *user* turn (the original paper's clearest negative result: entropy
-0.41→0.23, 44.5 vs 48.3). It should re-score the attempt as the assistant turn only. `sdpo_feedback.py`
-`_LiveFeedbackBuilder`. *(original SDPO, feedback_alignment)*
+**Finding 1 — the solution arm is RefSol-diffuse and *fights correct code*.** On easy, all 8 rollouts
+AC'd, so the teacher sees a *different* correct solution. The advantage is **broadly negative (45% of
+tokens, mean −0.38, spikes to −21.6) across the entire rollout — even though the scored rollout is
+itself fully correct.** This is exactly the paper's RefSol red flag (panel ii): a correct-but-different
+reference makes the teacher prefer its own surface form everywhere, so the gradient pushes against
+correct code instead of localizing on an error. Our copy-the-AC-solution regime is **diffuse, not
+localized.**
 
-### T2 — The run (the actual deliverable)
+**Finding 2 — the feedback arm is ~20× weaker *and* not localized at the bug.** On medium/hard
+(all-fail groups → judge feedback), mean |A_t| is **0.022 / 0.019 — roughly 1/20th the solution arm's
+0.449** — and mean A_t ≈ 0 (red and blue cancel). The judge feedback barely moves the teacher's
+next-token distribution at all. Worse, what little signal there is sits **slightly more in the
+reasoning prose than in the code** (reasoning |A| 0.027 vs code 0.013 on medium; 0.022 vs 0.006 on
+hard) — the opposite of localizing on the buggy code. So our iteration-02 innovation (the arm that
+fires on hard all-fail groups, where we most need signal) is currently **a weak, diffuse nudge**, not a
+StepAlignFB-style localized correction.
 
-**T2-1. Launch the iteration-03 moving-frontier curriculum with T0/T1 fixes baked in.**
-*This is what produces "something substantial."* Dense reward (✅ implemented), feedback-ON, variance>0
-frontier band, **fixed teacher + low scheduled distillation + KL anchor + canaries** from T0. Resolve
-iteration-03's open decisions for the 24h budget: **probe n=16**; **seed the band with the reachable
-hards** from the pass@16/32 probe (don't wait for the frontier to migrate there); a **short schedule**
-(one or two rounds); **early-stop on held-out pass@k**, not loss. Run the watchdog-protected Modal
-pre-flight (`--max-steps 3 --save-steps 1`, ~15min/~$2) first, then the real run.
+**Finding 3 — base over-reasons; needs the full budget to even emit code, and TLE is the dominant
+failure.** A first pass at a **2048-token** budget produced **NO_CODE on all medium/hard rollouts**
+(base ran out of budget mid-reasoning under `CP_METHOD_SYS` — figure
+[`figures/token_advantage_2048.png`](figures/token_advantage_2048.png)). Only at the **8192-token**
+training budget did medium/hard emit code (rollouts run 2.2k–5.6k tokens). The dominant failure is
+**TLE** (correct idea, too slow), not WA — so the "error" is the **whole algorithmic approach**, with
+no single error token to localize. This is a real domain gap from the paper's math-step setting and
+shapes what "trace alignment" can even mean for code (§5).
 
-**T2-2. Eval base + adapter on the 53-problem held-out** (py & cpp × difficulty, pass@k n=16) + GSM8K,
-on the **same** vLLM `--enable-lora` server. Report deltas, band trajectory, hard movement, and **all
-the T0-4 canaries** so a null is still a finding.
+## 4. Interpretation
 
-### T3 — Deferred to iteration-05 (high gain, but cannot build+smoke+Modal in 24h)
+Our two teacher arms are **badly mismatched in strength and both mis-shaped**:
+- The **solution arm dominates** the gradient (~20× stronger) and is **RefSol-diffuse** — it
+  suppresses correct tokens, the iteration-01 collapse mechanism seen from the token side.
+- The **feedback arm is nearly silent** exactly where we need it (hard, all-fail) and **isn't aimed at
+  the code**. Outcome/I-O feedback tells the teacher *that* the rollout failed without anchoring *where*
+  in the student's program, so it neither localizes nor strongly shifts predictions.
 
-- **RLCSD contrastive teacher** — use `G−` (the failed rollouts we already generate) as a negative
-  reference to cancel style-drift; verifier-anchored modulation (judge sets direction, distillation
-  only scales magnitude). Highest-gain *structural* change, but a new `SDPOTrainer` subclass + K
-  negatives + Modal. *(rlcsd)*
-- **SD-Zero reviser warm-start (two-phase)** — the principled fix for our **0-successful-rollout
-  gotcha**: a reviser teacher conditions on the *wrong* attempt + its verdict, so it gives signal even
-  when nothing passes. Two phases + new data path + SFT — too big for 24h. *(SD-Zero)*
-- **No-Context Anchoring (NCA)** — `+β·KL(sg[q_x]‖q_c)`, one extra forward pass; bolt-on to
-  `FeedbackSDPOTrainer`. Do **T1-1 (measure harm) first** — only worth it if harm is real. *(when_context_returns)*
-- **Rock-token diagnostic + freeze** — ~1.5× Modal speedup by freezing gradients on inert structural
-  tokens; but in *code* a "rock" (`{`, `;`) may be compilation-critical, so knockout-validate before
-  freezing. Efficiency, not capability. *(opd_rock_tokens)*
-- **SDPO+GRPO hybrid (λ≈0.9)** — the original paper's explicit recommendation for sub-8B models; the
-  scale-insurance if T0-1 shows a weak self-teacher. Depends on TRL support. *(original SDPO)*
-- **OPSDL distilled-spec teacher** — a "cleaner not smarter" teacher context (I/O spec + one worked
-  example, story stripped); cheap prompt change, but secondary to the above. *(opsdl_long_context)*
+This is the token-level confirmation of why iteration-02 stopped the collapse but **didn't beat base**:
+the signal that fires on the hard cases is too weak and too diffuse to teach new capability.
 
----
+## 5. What to try next (ranked)
 
-## The structural risk that overhangs everything
+1. **Make feedback trace-aligned to the student's code (the headline fix).** Prepend the student's own
+   submitted code (anchor via induction-head copy) and point the verdict at it — *anchor the correct
+   prefix, describe (don't paste) the buggy tail*. Predicted to convert the feedback arm from diffuse
+   to localized. (`_format_feedback`, `src/sdpo_ojbench.py:197`.)
+2. **Rebalance the arms.** The solution arm being 20× stronger means solution-copying drives training;
+   consider down-weighting it, or only using it when the AC demo is *close* to the student's trace.
+3. **TLE needs approach-level, not token-level, feedback.** For "too slow," trace alignment ≈ telling
+   the teacher the complexity is wrong and which loop dominates — not a single bad token.
+4. **Re-run this diagnostic after a feedback change** — it's a cheap (~35 min, free, local) before/after
+   check that doesn't need a training run or pass@k to tell us if the signal localized.
+5. Carry-forward from the literature: **fixed (not EMA) teacher** and the **solver-fails/judge-can-AC
+   frontier filter** (two independent votes across SD papers; `summary_feedback_alignment_sd.md`).
 
-The original SDPO paper's scaling result is the elephant: **the marginal improvement of SDPO over GRPO
-is tightly coupled with base-model strength**, and at Qwen2.5-1.5B (closest data point to our
-Gemma-4-E2B) **SDPO underperforms GRPO**. Everything above assumes the self-teacher has *something* to
-distill. **T0-1 tests exactly that assumption** — which is why it is ranked first and gates the spend.
-If the teacher edge is absent, the iteration-04 result is "SDPO doesn't help at this scale; here is the
-measurement," plus the SDPO+GRPO hybrid as the iteration-05 path. That is a substantial, honest result
-— not a failed run.
+## 6. Caveats
 
-## One-line summary
+- **One problem per difficulty, one rollout each** — illustrative, not a distribution. Magnitudes are
+  robust (the 20× gap is huge) but per-token placement is anecdotal; a fuller run would average |A_t|
+  over many rollouts per band.
+- **HF teacher-forced logprobs**, full-precision log-softmax — faithful to the SDPO advantage
+  definition, but training uses `topk_logits` distillation (top-100), so absolute magnitudes won't
+  match the loss one-to-one; the *shape* (localized vs diffuse) is the signal.
+- **Judge uses reward case-caps** (≤1 MB, ≤20 cases, smallest-first) as in training, so the feedback's
+  failing-test I/O is from the capped set.
+- The easy/medium/hard problems are the first available of each difficulty in the full pool
+  (loj-2314 / 2086 / 2083), chosen deterministically, not cherry-picked.
 
-In <24h: **probe the self-teacher edge (gate), flip EMA→fixed, cut distillation to a small scheduled
-verifier-dominated nudge, add a KL anchor and a two-sided collapse canary, make feedback trace-aligned**
-— then launch the already-de-risked moving-frontier curriculum and judge it on held-out pass@k, with
-the canaries making even a null publishable. Contrastive/reviser/NCA trainers are iteration-05.
+## 7. Reproduce
+
+```bash
+mkdir -p runs/iteration-04 && cd runs/iteration-04
+S=../../src
+PYTHONPATH=$S OJB_SPLITS=ojb_splits_full.json python $S/plot_token_advantage.py \
+  --difficulties easy,medium,hard --num-generations 8 --max-new-tokens 8192
+# quick wire-test: add --smoke (1 difficulty, G=2, 256 tok)
+```

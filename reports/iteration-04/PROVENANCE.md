@@ -1,4 +1,4 @@
-# Iteration 06 — Provenance
+# Iteration 04 — Provenance
 
 **Type:** diagnostic (no training, no eval run). **Spend:** $0 (local GB10 only, ~35 min wall-clock).
 
@@ -16,7 +16,7 @@
 
 ## Command
 ```bash
-cd runs/iteration-06
+cd runs/iteration-04
 PYTHONPATH=../../src OJB_SPLITS=ojb_splits_full.json \
   ../../.venv/bin/python ../../src/plot_token_advantage.py \
   --difficulties easy,medium,hard --num-generations 8 --max-new-tokens 8192 \
@@ -30,5 +30,5 @@ PYTHONPATH=../../src OJB_SPLITS=ojb_splits_full.json \
 - `data/token_advantage_2048.json` — same for the 2048-token pass.
 - `data/token_advantage_stats.csv` — summary stats per difficulty.
 
-## Raw (gitignored, under runs/iteration-06/)
+## Raw (gitignored, under runs/iteration-04/)
 - `tadv.log`, `RUNNING_TADV.txt`, `token_advantage_2048.*`.

@@ -127,10 +127,15 @@ Figures: `python src/generate_slides.py` (set `ITER=iteration-NN`); cross-iterat
   `llm.generate(all_prompts)` (or any "collect in a list, dump at the end") returns only after
   *everything* finishes: **zero live visibility** (you can't tell steady progress from a hang) and
   **zero resumability** (an interruption loses the whole batch). Generate→judge **per item in a loop,
-  writing the JSON after each** (`gen_rollouts.py` `record()`), and support `--resume` to skip items
-  already in the output file. On the GB10 batching buys ~nothing anyway (aggregate ~14 tok/s ≈
-  single-stream ~13), so per-request write-as-you-go costs no throughput while giving progress you can
-  watch and a run you can restart. Same rule for eval sweeps.
+  writing the JSON after each** (`gen_rollouts.py` `_persist()`), and support `--resume` to skip items
+  already in the output file. **Don't conflate streaming-to-disk with *serial* generation.** The way to
+  keep visibility/resume AND speed on a real GPU is **concurrent generation with per-completion writes**
+  (`gen_rollouts.py --concurrent K`, vLLM v1 `AsyncLLM`): all requests run in vLLM's continuous batch,
+  each writes the instant *it* finishes. Serial (`--concurrent 1`) is only the GB10 default because the
+  GB10 hangs on high concurrency *and* batching buys it ~nothing there (aggregate ~14 tok/s ≈
+  single-stream ~13 — a GB10 LPDDR-bandwidth artifact, **NOT a general truth**). On the H200 the KV
+  cache showed **~45× concurrency at 16k**, so serial would waste most of the GPU — use `--concurrent`
+  there (the Modal `gen` entrypoint defaults to 12). Same rule for eval sweeps.
 - **Serve the adapter via `vllm --enable-lora`, NOT a merged checkpoint.** `merge_and_unload` on this
   multimodal model silently drops upper-layer `k_norm` weights → vLLM "weights not initialized". Eval
   base and adapter on the *same* server for a clean delta.

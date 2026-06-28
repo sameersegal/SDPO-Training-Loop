@@ -33,7 +33,8 @@ DATA = REPO / "data"
 # Code + judge ship to a FLAT /root/app layout (data via Volume), so absolute
 # local paths keep `modal run src/modal_sdpo.py` working from any CWD.
 _CODE = ["_paths.py", "ojbench_eval.py", "sdpo_ojbench.py", "sdpo_train.py",
-         "sdpo_feedback.py", "sdpo_passk.py", "sdpo_eval_vllm.py", "eval_runner.py"]
+         "sdpo_feedback.py", "sdpo_passk.py", "sdpo_eval_vllm.py", "eval_runner.py",
+         "gen_rollouts.py"]
 _DATA = ["ojb_splits.json", "ojb_splits_full.json", "ojbench_selected.json"]
 
 # CUDA *devel* base: flashinfer JIT-compiles kernels at runtime and needs nvcc.
@@ -469,6 +470,139 @@ def run_eval():
                 json.dump(content, f, indent=2)
             print(f"  wrote {fname}")
     print("[modal] eval complete — see sdpo_passk_*.json, sdpo_eval_*.json, results_gsm8k_*.json")
+
+
+# ---------------------------------------------------------------------------
+# Generate + judge BASE rollouts (gen_rollouts.py) on a fast GPU — the Phase-0
+# probe set. H200 batches thinking-ON generation far better than the GB10. Writes
+# per-rollout to the sdpo-outputs volume (durable + resumable; committed every 60s).
+# ---------------------------------------------------------------------------
+@app.function(
+    image=image,
+    gpu="H200",  # overridden per-run via .with_options(gpu=...)
+    cpu=16.0,    # dense judging is subprocess- + thread-parallel
+    volumes=VOLUMES,
+    timeout=4 * 60 * 60,  # base gen + judge; ungated model, no secrets needed
+)
+def gen_rollouts_remote(args: list[str], ojb_splits: str = "ojb_splits.json"):
+    import json
+    import os
+    import signal
+    import subprocess
+    import sys
+    import threading
+    import time
+
+    os.chdir("/root/app")
+    os.environ["OJB_SPLITS"] = ojb_splits   # read at import by sdpo_ojbench
+    outputs.reload()                         # see any prior partial for --resume
+
+    try:
+        import torch
+        p = torch.cuda.get_device_properties(0)
+        print(f"[modal] GPU: {p.name} ({p.total_memory / 1024**3:.0f} GiB)", flush=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"[modal] GPU probe failed: {e}", flush=True)
+
+    noi = "/root/app/ojbench_data/NOI"
+    n = len(os.listdir(noi)) if os.path.isdir(noi) else 0
+    print(f"[modal] ojbench test-case dirs visible: {n}", flush=True)
+    assert n > 0, f"{noi} empty — populate the ojbench-data volume first"
+
+    cmd = [sys.executable, "gen_rollouts.py", *args]
+    print("[modal] running:", " ".join(cmd), flush=True)
+
+    # Periodic commit so per-rollout writes to sdpo_out become durable DURING the run
+    # (a dead run still leaves its rollouts on the volume to resume from). + no-progress
+    # watchdog (a silent generation/judge hang otherwise burns the GPU for hours).
+    stop = threading.Event()
+
+    def _committer():
+        while not stop.wait(60):
+            try:
+                outputs.commit()
+            except Exception as e:  # noqa: BLE001
+                print(f"[modal] periodic commit failed: {e}", flush=True)
+
+    threading.Thread(target=_committer, daemon=True).start()
+
+    STALL = int(os.environ.get("WATCHDOG_STALL_SECS", "1800"))  # long thinking-ON rollouts
+    last = [time.time()]
+    killed = [False]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, bufsize=1, start_new_session=True)
+
+    def _reader():
+        for line in proc.stdout:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            last[0] = time.time()
+
+    def _watchdog():
+        while proc.poll() is None:
+            if stop.wait(30):
+                return
+            if time.time() - last[0] > STALL:
+                print(f"[modal] WATCHDOG: no output for >{STALL}s — killing hung gen", flush=True)
+                killed[0] = True
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    pass
+                return
+
+    threading.Thread(target=_reader, daemon=True).start()
+    threading.Thread(target=_watchdog, daemon=True).start()
+    try:
+        rc = proc.wait()
+    finally:
+        stop.set()
+        outputs.commit()   # persist rollouts written before any hang/kill
+        hf_cache.commit()  # persist newly-downloaded weights for next run
+    if killed[0]:
+        raise RuntimeError("gen killed by no-progress watchdog — partial results committed; "
+                           "rerun with --resume")
+    if rc != 0:
+        raise RuntimeError(f"gen_rollouts.py exited {rc}")
+    out_path = args[args.index("--out") + 1] if "--out" in args else "rollouts.json"
+    return json.load(open(out_path))
+
+
+@app.local_entrypoint()
+def gen(smoke: bool = False, gpu: str = "H200", model: str = "Qwen/Qwen3-8B",
+        max_new_tokens: int = 32768, gpu_util: float = 0.85, resume: bool = True,
+        concurrent: int = 12, ojb_splits: str = "ojb_splits.json", out: str = ""):
+    """Generate + judge base Qwen3-8B rollouts on Modal (Phase-0 probe set).
+      modal run src/modal_sdpo.py::gen --smoke   # 1 easy rollout — validate image+data+vllm+judge
+      modal run src/modal_sdpo.py::gen           # full spread: easy/medium/hard, ≥3 each
+    """
+    import json
+    from collections import Counter
+
+    if smoke:
+        specs = [["--spec", "easy:2314:1"]]
+        max_new_tokens = 8192
+        out = out or "sdpo_out/qwen3_smoke.json"
+    else:
+        specs = [["--spec", "easy:2314,2317,2420:1"],
+                 ["--spec", "medium:2086,2129,2130:1"],
+                 ["--spec", "hard:2083,2131,2133:2"]]
+        out = out or "sdpo_out/qwen3_rollouts.json"
+    args = ["--model", model, "--engine", "vllm", "--gpu-util", str(gpu_util),
+            "--max-new-tokens", str(max_new_tokens), "--concurrent", str(concurrent), "--out", out]
+    for s in specs:
+        args += s
+    if resume:
+        args.append("--resume")
+    print(f"[modal] gpu={gpu} smoke={smoke} args={args}", flush=True)
+    res = gen_rollouts_remote.with_options(gpu=gpu).remote(args, ojb_splits=ojb_splits)
+    r = res.get("results", [])
+    print(f"[modal] {len(r)} rollouts · verdicts={dict(Counter(x['verdict'] for x in r))} "
+          f"· failures={sum(1 for x in r if x['verdict'] != 'AC')}")
+    local = out.split("/")[-1]
+    with open(local, "w") as f:
+        json.dump(res, f, indent=2)
+    print(f"[modal] saved -> {local} (also on volume sdpo-outputs:/{out.split('/',1)[-1]})")
 
 
 # ---------------------------------------------------------------------------

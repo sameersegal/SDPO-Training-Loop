@@ -17,8 +17,13 @@ Standard OPD (student rolls out under its own policy; a stronger teacher supplie
    - **RepRate** — fraction of long rollouts whose tail is extremely compressible (zlib compression ratio of the last 10k chars `> 10`).
 2. **Stable early phase.** Accuracy climbs, TruncRate sits at a moderate baseline (~0.2–0.5 on rollouts), RepRate ≈ 0.
 3. **Abrupt phase transition (~30 steps).** TruncRate → 1.0, RepRate → 0.3–0.6, **held-out accuracy drops sharply** at nearly the same step. Robust across three student/teacher pairs (Qwen2.5-Math-1.5B/7B; DeepSeek-R1-Distill-7B and OpenThinker3-7B teachers) → a property of OPD, not a single bad config.
+
 4. **Rollout-level cause.** At onset, response length jumps to the budget, both student and teacher log-probs become much less negative, but the **teacher's rises more**, so the average reverse-KL advantage **spikes**.
+
 5. **Token-level cause.** Repetitive-tail tokens carry **4–9× the advantage** of regular tokens *throughout* training; once they reach ~30% of tokens after collapse, their frequency × advantage takes over the update.
+
+![Figure 4: Reverse-KL advantage for regular vs repetitive tokens.](images/opd_length_inflation_figure_4.png)
+*Figure 4 — Reverse-KL advantage for regular vs. repetitive tokens during OPD training. Repetitive tokens receive larger advantages than regular tokens throughout training, so once they become frequent their frequency × oversized advantage dominates the gradient.*
 6. **Mechanism.** Decompose the policy gradient over states in/out of the repetitive-tail set R. As visitation to R grows, its term dominates and pushes for more continuations in R — a feedback loop where repetition is rewarded for being high-likelihood under the teacher. **This is distinct from the GRPO/Dr.GRPO/DAPO "longer-is-better" sequence-length bias** — it is a token-level reverse-KL pathology specific to OPD's on-policy dynamics.
 
 ## The fix: Stable-OPD (two complementary knobs)

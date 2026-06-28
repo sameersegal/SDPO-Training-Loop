@@ -15,6 +15,9 @@ Self-distillation (a self-teacher conditioned on **privileged context** $c$ — 
 
 1. **Richer teacher context → more confident, shorter, fewer epistemic tokens.** They formalize context richness as conditional mutual information $I(y^*; c \mid x)$ and sweep four conditionings. Length and epistemic-token count fall **monotonically** as $I$ rises (Table below). Full-solution guidance ($c=s$) gives near-perfect score but 7× shorter outputs with ~20× fewer epistemic tokens than unguided.
 
+   ![Figure 2a: Reasoning with Epistemic Verbalization](images/selfdistill_degrades_reasoning_figure_2a.png)
+   *Figure 2a — Reasoning with epistemic verbalization: hedging tokens (`wait`, `hmm`, `perhaps`, …) mark uncertain paths the model can revisit and self-correct.*
+
    | Setting | Avg score | Avg length | Epistemic tokens |
    |---|---|---|---|
    | (1) Unguided ($c=\emptyset$) | 0.30 | 13,054 | 182.5 |
@@ -22,7 +25,7 @@ Self-distillation (a self-teacher conditioned on **privileged context** $c$ — 
    | (3) Solution minus `<think>` | 0.78 | 12,036 | 159.8 |
    | (4) Regeneration-conditioned ($c=y_r$) | 0.95 | 2,808 | 24.1 |
 
-2. **The suppression is causal, not stylistic.** Pure SFT on 800 *correct* solution-guided traces ($\mathcal{D}_{sg}$) **tanks** math benchmarks (AIME24 54.8→20.2, MATH500 92.2→65.5), while SFT on 800 *correct* unguided traces ($\mathcal{D}_{ug}$) is roughly neutral. Same correctness, different epistemic density → opposite outcome.
+2. **The suppression is causal, not stylistic.** Pure SFT on 800 *correct* solution-guided traces ($\mathcal{D}_{\mathrm{sg}}$) **tanks** math benchmarks (AIME24 54.8→20.2, MATH500 92.2→65.5), while SFT on 800 *correct* unguided traces ($\mathcal{D}_{\mathrm{ug}}$) is roughly neutral. Same correctness, different epistemic density → opposite outcome.
 
 3. **On-policy (SDPO vs GRPO).** Across DeepSeek-R1-Distill-7B, Qwen3-8B (think on/off), Olmo3-7B: **GRPO grows length + epistemic tokens and gains modestly OOD; SDPO shrinks both and falls below the base model** on AIME24/AMC23, worst with full-solution context $c=s$. Reducing richness to $c = s_{\setminus\text{think}}$ (solution without chain-of-thought) **attenuates but doesn't eliminate** the drop.
 

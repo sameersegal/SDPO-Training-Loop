@@ -53,3 +53,6 @@ reports/iteration-*/data/prompt_condition.json
 
 # regenerable static export of the papers CSV (src/knowledge_view.py --out)
 knowledge/papers.html
+
+# personal Claude Code settings (machine-local)
+.claude/settings.local.json

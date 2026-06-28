@@ -20,6 +20,9 @@ Self-distillation supplies dense, per-token credit by matching a **student** (se
 
 **Setup.** Solver–critic loop (their Fig. 1): solver emits step-tagged traces `<step_1>...<step_N><answer>`; frozen critic grades them; solver is trained with forward-KL self-distillation using the critic's feedback as context `c`. Only the feedback `f` varies across conditions — solver, loss, divergence, all hyperparameters fixed. Group size **G=1** for SD (1 rollout), G=8 for GRPO; both trained 7 epochs (so dataset exposure isn't a confound). **Teacher is held FIXED at the initial LoRA-disabled base policy** (no EMA). Dataset deliberately filtered to the **"learnable but hard"** band — problems the 1.7B solves rarely (Avg@16 < 5/16) but the critic *can* solve — so the model gets *actionable* feedback rather than being handed a full solution (which would collapse RefSol and StepAlignFB into the same thing). 312 problems, 282 train / 30 eval.
 
+![Figure 1: solver–critic training loop](images/feedback_alignment_sd_figure_1.png)
+*Figure 1 — the solver–critic loop: a frozen critic returns feedback $f_i$ on each solver rollout $y_i$, and only the solver is trained, via self-distillation with that feedback as context (from the paper).*
+
 **Headline results (per-metric best checkpoint, steps 10–70):**
 
 | Method | Pass@12 | Maj@12 | Avg@12 |
@@ -34,6 +37,10 @@ Both SD variants dominate GRPO throughout training (≈8-point Avg@12 gap); Step
 
 - **StepAlignFB ≈ a process reward model for free.** At incorrect steps the self-teacher diverges sharply from the student → large *negative* advantages localized at the error; at correct steps (including the prefix before the error) the critic faithfully preserves the student's path → *positive* advantages. Localized credit, no PRM training, no per-step scalar labels.
 - **RefSol gives a diffuse, suppressive signal.** A complete *alternative* derivation reaches the right answer via different notation/phrasing, so the teacher prefers its surface form **even on steps the student got right** → diffuse negative advantage almost everywhere. It conflates "you erred here" with "I'd have written it differently."
+
+![Figure 4: Incorrect-step per-token advantages](images/feedback_alignment_sd_figure_4.png)
+
+*Figure 4 — Incorrect step. Per-token advantages for a rollout with an error at the dashed line. StepAlignFB (top) produces a sharp negative shift on the tokens after the erroneous step while reinforcing the correct preceding steps (PRM-like localization); RefSol (bottom) is broadly negative across the whole trace, conflating the error with everywhere the student diverges from the canonical solution.*
 - **Induction-head copying governs everything (the "faithful-scribe convention").** Three regimes, all explained by `[A][B]...[A]→[B]` copy heads (Olsson et al. 2022):
   - **Full verbatim quote of the wrong step** ("here is your previous attempt … step N is wrong") → the model *copies the erroneous continuation*; the appended correction arrives too late → advantages diffusely **positive** (reinforces the error!). Matches Hübotter et al.'s finding that including the raw attempt biases the teacher and kills exploration.
   - **Omit the trace entirely** ("this step is correct") → no in-context anchor → teacher drifts to other surface forms → diffuse **negative** advantage even on correct steps.

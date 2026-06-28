@@ -5,16 +5,28 @@ This repo builds on **Reinforcement Learning via Self-Distillation** (SDPO),
 Bagatella, Marta, Hakimi, Shenfeld, Kleine Buening, Guestrin & Krause (ICML 2026). SDPO is the
 method our `SDPOTrainer` runs (see `CLAUDE.md` / `docs/EXPERIMENT.md` §6).
 
+## Two web tools (both stdlib-only, in `src/`, bind `0.0.0.0` for remote browsers)
+1. **Classify papers — `src/knowledge_view.py`** (default port **7400**): browse/search/filter the
+   paper set and (re)classify each one. Clicking a classification saves it to `citing_papers.csv`
+   and auto-marks the paper `reviewed`; a separate "Mark reviewed" button confirms a correct label.
+   ```bash
+   python src/knowledge_view.py knowledge/citing_papers.csv --serve --port 7400
+   python src/knowledge_view.py knowledge/citing_papers.csv --out knowledge/papers.html   # static export
+   ```
+2. **Read & annotate reports — `src/knowledge_reports.py`** (default port **7500**): render the
+   `summary_*.md` reports as formatted HTML (markdown via marked.js, **math via KaTeX** — both from
+   CDN, so the *viewing* browser needs internet). Select any text to save a highlight; each is
+   appended to `knowledge/annotations.json` with a copy of the highlighted text and a **deep link**
+   back to that spot (`/?report=<file>&hl=<text>`). Jump/copy-link/delete per annotation.
+   ```bash
+   python src/knowledge_reports.py knowledge --serve --port 7500
+   ```
+
 ## Files
 - **`citing_papers.csv`** — the original paper plus every paper Google Scholar lists as citing it.
   Columns: `arxiv_id, relationship (original|citing), related, reviewed, title, url, abstract`.
-  `reviewed` (`yes`/`no`) tracks whether a human has confirmed the `related` label.
-- **`src/knowledge_view.py`** — one-file web UI to browse, search, and re-classify the CSV:
-  `python src/knowledge_view.py knowledge/citing_papers.csv --serve --port 7400`. Clicking a
-  classification saves it to the CSV and auto-marks the paper `reviewed`; a separate "Mark reviewed"
-  button confirms a correct label. `--out` writes the static read-only `papers.html` instead.
-  The `abstract` column holds each paper's full arXiv abstract (pulled from the arXiv API
-  2026-06-27), so the whole set is reviewable from the one file.
+  `reviewed` (`yes`/`no`) tracks whether a human has confirmed the `related` label; the `abstract`
+  column holds each paper's full arXiv abstract (pulled 2026-06-27). Edited via tool #1 above.
   - **`related`** classifies each paper's relevance to our SDPO-on-OJBench work (verified against
     each abstract, 2026-06-27):
     - `yes` — directly relevant: on-policy / self-distillation, rich-feedback RL, reasoning
@@ -34,6 +46,8 @@ method our `SDPOTrainer` runs (see `CLAUDE.md` / `docs/EXPERIMENT.md` §6).
   - `summary_self_distilled_policy_gradient.md` — *Self-Distilled Policy Gradient* ([2606.04036](https://arxiv.org/abs/2606.04036)) — our `distillation_weight=1.0` is ~1000× too strong; gate + schedule + KL anchor.
   - `summary_feedback_alignment_sd.md` — *The Role of Feedback Alignment in Self-Distillation* ([2606.11173](https://arxiv.org/abs/2606.11173)) — make feedback trace-aligned (fix only the wrong step), not outcome-aligned.
   - `summary_when_context_returns.md` — *When Context Returns* ([2606.11627](https://arxiv.org/abs/2606.11627)) — context-induced degradation; No-Context Anchoring term.
+- `annotations.json` — highlights saved from tool #2 (created on first save): a list of
+  `{id, report, title, text, note, link, url, created}`.
 - `papers.html` — regenerable static export (gitignored).
 
 ## Source of the citing list

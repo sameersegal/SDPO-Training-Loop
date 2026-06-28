@@ -11,6 +11,9 @@
 
 Standard RLVR (e.g. GRPO) learns from a single **scalar** reward per attempt — a credit-assignment bottleneck, and worse, when every rollout in a group gets the same (usually 0) reward the GRPO advantage is exactly zero and learning stalls. But verifiable environments actually emit **rich tokenized feedback** (runtime errors, failing tests, judge output) that says *why* an attempt failed. SDPO turns that feedback into a **dense, logit-level** learning signal **without any external teacher**: take the *current* policy, re-prompt it with the question **plus the feedback** (and a correct sibling solution if one exists in the group) to form a **self-teacher** $q_\theta(\cdot\mid x,f)$, then minimize the per-token KL between the student $\pi_\theta(\cdot\mid x)$ and the (stop-gradient) self-teacher on the student's **own** rollout. No extra sampling — just a second forward pass for log-probs. This is literally a policy gradient with the GRPO advantage swapped for a logit-level one: $A^{\text{SDPO}}_{i,t}(\hat y) = \log\frac{q_\theta(\hat y\mid x,f,y_{<t})}{\pi_\theta(\hat y\mid x,y_{<t})}$ — zero only where student and teacher agree, positive/negative per token elsewhere. Result on contest code (LCBv6, Qwen3-8B): **48.8% vs GRPO 41.2%**, matching GRPO's final accuracy in **4× fewer generations**, beating Claude Sonnet 4 / Opus 4 on that subset.
 
+![Figure 2: RLVR vs RLRF](images/sdpo_original_figure_2.png)
+*Figure 2 — From scalar rewards (RLVR) to rich, tokenized environment feedback (RLRF): the same loop, but the environment returns *why* an attempt failed instead of a single number — the "richer signal" SDPO learns to exploit.*
+
 ## The method, clearly
 
 **The self-teacher (the whole idea).** The same weights play two roles: *student* generates the attempt blind; *teacher* re-reads that attempt **with feedback in context** and, via in-context learning, retroactively "disagrees" with the tokens that led the attempt astray. The teacher is strictly more informed than the student, so its next-token distribution is a free, dense supervision target. The reprompt template (their Table, = our reprompt path) is:
@@ -43,10 +46,16 @@ Assistant: <original_response>                 # re-scored under the teacher's l
 ## Key results
 
 - **Rich-feedback code (LCBv6, the OJBench analog):** SDPO 48.8% vs GRPO 41.2%, 4× sample-efficiency, > Claude Sonnet 4 (40.5%). Gains concentrate on **medium and hard** problems.
+
 - **Scaling — the most important caveat for us.** SDPO's edge over GRPO **grows with model size** and **vanishes or reverses on small/weak models**: big wins on Qwen3-8B, only slight on small Qwen3, and SDPO **underperforms GRPO on Qwen2.5-1.5B**. Self-teaching is an **emergent in-context-learning ability** — "the marginal improvement of SDPO over GRPO is tightly coupled with the strength of the base model." For weak models they recommend the **hybrid `SDPO+GRPO`** advantage `A = λ·A_GRPO + (1-λ)·A_SDPO` (λ=0.9), which is more robust on Qwen3-0.6B (and slightly worse than pure SDPO on strong models — i.e. the scalar GRPO signal can be *harmful* once the model is strong).
+
+![Figure 8: SDPO improves with model size](images/sdpo_original_figure_8.png)
+*Figure 8 — SDPO's margin over GRPO at LCBv6 step 80 grows with model size across Qwen3 0.6B→8B; at the smallest scale the two converge. This scaling curve is the single most important caveat for SparkyCoder's ~2B-class Gemma-E2B.*
 - **No rich feedback (science Q&A, tool use):** even here SDPO beats an *improved* GRPO (70.2% vs 66.6% aggregate) by using successful siblings as implicit feedback, learning ~5–6× faster, with **3–11× shorter generations** at higher accuracy — "effective reasoning need not be verbose."
+
 - **Anti-forgetting:** on-policy SDPO keeps held-out IFEval / ArenaHard / MMLU-Pro roughly flat while learning the task — a **better capability/regression tradeoff than GRPO**, and far better than **SFT-on-self-teacher** (off-policy imitation), which both underperforms on-task and forgets more.
 - **Test-Time Self-Distillation (TTT):** on *very hard* LCBv6 problems (base pass@64 < 0.03), run SDPO with batch size 16 on a **single** question — distilling the running feedback history into weights. It discovers solutions with **~3× fewer attempts** than best-of-k / multi-turn, solves problems neither baseline can, and works **even though the initial self-teacher solves <1%** of these (0% on 78% of them). Pure RLVR can't even start here (no signal until first success).
+
 
 ## How this maps onto SparkyCoder (the important part)
 

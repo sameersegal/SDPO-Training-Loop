@@ -19,6 +19,10 @@ On-policy self-distillation (OPSD) builds a dense per-token signal from the gap 
 
 3. **Contrastive cancellation cleans the signal.** Feed the teacher a **positive hint** (a correct sibling rollout) and a **negative hint** (an incorrect sibling rollout) under an *identical* "Reference Solution … Correct final answer: …" template — the negative hint is deliberately mislabeled as correct so the teacher treats both as ground truth. Subtracting the two teacher–student gaps removes the shared stylistic shift; what survives reflects whether the reference's *content* points at the right answer. Re-running the task/style analysis on `|e_ctr|` shows the style–task gap shrinks markedly.
 
+![Figure 3: Overview of RLCSD](images/rlcsd_contrastive_figure_3.png)
+
+*Figure 3 — Overview of RLCSD. **Stage 1** samples a group of rollouts and partitions them by the verifier into correct (G+) and incorrect (G−) subsets. **Stage 2** feeds a positive hint and K negative hints to the teacher under an identical template; their difference yields the contrastive signal e_ctr,t, in which the shared privilege-induced style component is substantially suppressed (the correct-vs-incorrect-hint style drift cancels). **Stage 3** converts e_ctr,t into a bounded modulation r_t, applies it to the verifier advantage A_ORM with a sign-preserving clamp, and aggregates a two-path clipped loss.*
+
 4. **Two refinements make the contrast stable.**
    - **K-marginalized negatives (K=4).** Incorrect solutions are heterogeneous (many error types); a single random negative hint often shares no error mode with the target rollout, so the negative branch loses its sign. Averaging teacher probabilities over **K independent negative hints** drops the wrong-sign rate from ~51% to <8%.
    - **Exclude the target rollout from its own hint pool.** Conditioning the teacher on a rollout as its *own* hint makes it pathologically over-confident (high-prob token fraction +~30%) and destroys the per-token discrimination. Draw hints only from *siblings* `G± \ {y}`.

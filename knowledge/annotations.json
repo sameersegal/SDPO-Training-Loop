@@ -1,0 +1,12 @@
+[
+  {
+    "id": "bbe09872",
+    "report": "summary_feedback_alignment_sd.md",
+    "title": "The Role of Feedback Alignment in Self-Distillation",
+    "text": "aligned feedback concentrates the negative advantage at the error-adjacent tokens and reinforces the correct surrounding steps (PRM-like), whereas the reference solution diverges in surface form even where the student was right, so it produces diffuse negative advantage across the whole rollout — mixing genuine error-correction with mere stylistic disagreement.",
+    "note": "stepwise feedback better than reference solution",
+    "link": "/?report=summary_feedback_alignment_sd.md&hl=aligned%20feedback%20concentrates%20the%20negative%20advantage%20at%20the%20error-adjacent%20tokens%20and%20reinforces%20the%20correct%20surrounding%20steps%20%28PRM-like%29%2C%20whereas%20the%20reference%20solution%20diverges%20in%20surface%20form%20even%20",
+    "url": "http://192.168.1.29:7500/?report=summary_feedback_alignment_sd.md&hl=aligned%20feedback%20concentrates%20the%20negative%20advantage%20at%20the%20error-adjacent%20tokens%20and%20reinforces%20the%20correct%20surrounding%20steps%20%28PRM-like%29%2C%20whereas%20the%20reference%20solution%20diverges%20in%20surface%20form%20even%20",
+    "created": "2026-06-28T06:57:17"
+  }
+]

@@ -13,6 +13,10 @@ A single model is trained to play two roles. As **Generator** it answers a probl
 
 ## The method, step by step
 
+![Figure 2: Overview of SD-Zero's two phases](images/sd_zero_binary_to_dense_figure_2.png)
+
+*Figure 2 — Overview of SD-Zero. Phase 1 (SRT) collects 6K outcome-conditioned self-revision traces by sampling an initial response, prompting the model to self-revise an incorrect response, and keeping the correct revision. Phase 2 (OPSD) runs on-policy self-distillation with the SRT model as both student and teacher: the student generates an on-policy response and the teacher generates a revised version conditioned on that response and its outcome reward — bootstrapping performance by internalizing self-revision.*
+
 1. **Setup / assumptions.** Dataset is just `{(problem x, ground-truth final answer a)}` — **no gold reasoning traces**. The only feedback is a binary verifier $r(y,a)\in\{0,1\}$. The training set is split into two disjoint subsets ($N_1$ for Phase 1, $N_2$ for Phase 2).
 
 2. **Phase 1 — Self-Revision Training (SRT), the warm-start.** Base models are *good generators but weak revisers*, so this phase installs the reviser skill. For each problem, sample initial responses $y_\text{init}$, score them, then build a revision prompt with a control phrase keyed on the reward:

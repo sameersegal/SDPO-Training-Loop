@@ -12,6 +12,9 @@ LLMs accept long inputs but *use* them poorly — there's a gap between the **ma
 
 ## The method, step by step
 
+![Figure 1: Overview of the OPSDL framework.](images/opsdl_long_context_figure_1.png)
+*Figure 1 — Overview of the OPSDL framework. Given a long context $C_L$ and its extracted short context $C_S$, the model generates responses on-policy conditioned on $C_L$. The same model under $C_S$ serves as a self-teacher, providing token-level supervision via point-wise reverse KL divergence to align the long-context generation with the short-context behavior.*
+
 1. **The asymmetry being exploited.** Same weights $\theta$, two prompts: under the **short** slice $C_S$ the model is calibrated and accurate (the evidence fits comfortably in its well-trained window, no distractors); under the **full** long context $C_L$ the same model gets distracted and hallucinates. So the short-context behavior is a free, high-quality teacher for the long-context student. No privileged *answer* is injected — only a **denoised subset of the same input**.
 
 2. **Data construction (reverse / self-instruct).** Sample long doc $C_L$ → randomly pick a short chunk $C_S$ → prompt the model to generate an instruction pool from $C_S$, sample $Q$ from it. Yields $(C_L, C_S, Q)$ triplets answerable from *both* contexts. No human annotation, no preference labels. (Follows LongPO's pipeline but keeps only the triplets — no preferred/dispreferred responses.)

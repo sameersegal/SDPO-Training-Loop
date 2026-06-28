@@ -1,0 +1,34 @@
+{
+  "label": "Qwen3-8B (base)",
+  "served_model": "Qwen/Qwen3-8B",
+  "n_samples": 8,
+  "max_tokens": 32768,
+  "by_language": {
+    "python": {
+      "overall": [
+        0.175,
+        0.2071,
+        0.2343,
+        0.24
+      ],
+      "easy": [
+        0.675,
+        0.7286,
+        0.7857,
+        0.8
+      ],
+      "medium": [
+        0.2,
+        0.3071,
+        0.3857,
+        0.4
+      ],
+      "hard": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  }
+}

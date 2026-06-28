@@ -78,6 +78,43 @@ that decision comes next, informed by this run's telemetry.
 
 ---
 
+## Base-model opportunity — the premise (measured)
+
+The whole iteration rests on there being a **pass@1 → pass@8 gap** for SDPO to exploit: problems the
+base model fails on the first try but solves within a few attempts are exactly what
+`use_successful_as_teacher` turns into teacher signal. We measured it for the **Qwen3-8B base** the
+same way we did for Gemma in iteration-01 — `sdpo_passk.py`, **n=8** samples/problem, **private**-test
+AC, unbiased pass@k — on the 25-problem held-out split (5 easy / 5 medium / 15 hard).
+
+![Qwen3-8B opportunity gap](figures/opportunity_gap_python.png)
+
+| difficulty | pass@1 | pass@2 | pass@4 | pass@8 | **gap (p@1→p@8)** |
+|---|---|---|---|---|---|
+| easy   | 0.675 | 0.729 | 0.786 | **0.80** | **+12.5 pp** |
+| medium | 0.200 | 0.307 | 0.386 | **0.40** | **+20.0 pp (doubles)** |
+| hard   | 0.000 | 0.000 | 0.000 | **0.00** | none |
+| overall | 0.175 | 0.207 | 0.234 | **0.24** | +6.5 pp |
+
+**Read:** there is a clear, exploitable gap on **easy and (especially) medium** — medium pass@8 is
+**2×** pass@1, the prime "activate-the-gate" band Phase 2 trains on. **Hard is flat 0** even at 8 tries
+(same wall Gemma hit) — these contribute no successful rollouts, so SDPO gets no signal from them at
+this budget; that's why the training band is *easy + sometimes-solvable medium*, not the full set.
+Qwen3-8B's absolute level is far above Gemma-2B (easy p@1 0.675 vs 0.325; medium p@8 0.40 same ceiling
+but reached from a higher floor) — in-regime, as intended.
+
+**Regime / caveats** (so this isn't silently mis-compared to the iteration-01 Gemma graph):
+- **Thinking-ON, 32k cap, temp 0.8, system `cp_method`** — matches iteration-05's training regime. The
+  iteration-01 Gemma graph used no system prompt and an 8k cap; the *shape* (easy>medium≫hard) is
+  comparable, the absolute numbers are model+regime-specific.
+- The 32k cap matters: at 8k Qwen3 think-ON returns NO_CODE even on easy (the budget goes to `<think>`),
+  which would have zeroed the graph. 25-problem split, **Python only** this run (cpp not measured).
+- **How:** Modal **H200**, `vllm serve … --enforce-eager` driven by `sdpo_passk` at **16-way
+  concurrency × n=8** (vLLM continuous-batched, ~2,000 tok/s, KV ≤46%). Entry point
+  `modal_sdpo.py::passk_base`; data in [`data/sdpo_passk_qwen3_base.json`](data/sdpo_passk_qwen3_base.json);
+  figures via `src/plot_opportunity.py`. App `ap-HLQgYhaMXBRojgDzfgmhnR`, **$3.32** (H200 $2.83).
+
+---
+
 ## Phase 0 — The go/no-go gate (BEFORE any training spend)
 
 Two steps, in order. Pure inference + critic API calls — cheap, no training GPU-hours. We do **not**

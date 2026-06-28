@@ -38,6 +38,20 @@ All commands use the venv's CLI: `.venv/bin/modal` (or activate the venv first).
 Flags (see `main()` in `src/modal_sdpo.py`): `--gpu` (H100/H200/A100-80GB), `--difficulties`,
 `--languages`, `--num-generations`, `--max-completion-length`, `--max-steps`, `--vllm-gpu-util`.
 
+### Base-model pass@k / opportunity graph (any model)
+`passk_base` serves an arbitrary **base** model with vLLM and runs `sdpo_passk` concurrently against
+it (16-way × n=8, continuous-batched) — the pass@1→pass@8 "opportunity" data, model-parameterized
+(`evaluate`/`passk_one` hardcode gemma + adapter semantics; this doesn't).
+```bash
+.venv/bin/modal run src/modal_sdpo.py::passk_base --smoke              # 2 easy, n=2 — validate plumbing
+.venv/bin/modal run src/modal_sdpo.py::passk_base                      # Qwen3-8B python, 25 heldout, n=8, 32k
+.venv/bin/modal run src/modal_sdpo.py::passk_base --model <id> --languages python,cpp --max-tokens 32768
+```
+Flags: `--model` (default `Qwen/Qwen3-8B`), `--languages`, `--n`, `--max-tokens`, `--temperature`,
+`--system` (cp_method/expert/none), `--gpu`, `--ojb-splits`, `--out`. **Qwen3 think-ON needs ≥16k**
+(8k → NO_CODE). Writes `sdpo_passk_<tag>.json` locally + to the `sdpo-outputs` volume. Plot with
+`ITER=<iter> python src/plot_opportunity.py --passk <json> --label "<model>"`.
+
 ## Get the trained adapter back
 
 ```bash

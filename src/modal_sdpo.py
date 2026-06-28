@@ -34,7 +34,7 @@ DATA = REPO / "data"
 # local paths keep `modal run src/modal_sdpo.py` working from any CWD.
 _CODE = ["_paths.py", "ojbench_eval.py", "sdpo_ojbench.py", "sdpo_train.py",
          "sdpo_feedback.py", "sdpo_passk.py", "sdpo_eval_vllm.py", "eval_runner.py",
-         "gen_rollouts.py"]
+         "gen_rollouts.py", "sdpo_critic.py", "sdpo_prompts.py", "teacher_eval.py"]
 _DATA = ["ojb_splits.json", "ojb_splits_full.json", "ojbench_selected.json"]
 
 # CUDA *devel* base: flashinfer JIT-compiles kernels at runtime and needs nvcc.
@@ -71,6 +71,11 @@ for _f in _CODE:
     image = image.add_local_file(str(SRC / _f), f"/root/app/{_f}")
 for _f in _DATA:
     image = image.add_local_file(str(DATA / _f), f"/root/app/{_f}")
+# Phase-0 probe inputs (committed under reports/) so teacher_eval reads them in-container.
+for _f in ["qwen3_rollouts.json", "qwen3_critiques.json"]:
+    _p = REPO / "reports" / "iteration-05" / "data" / _f
+    if _p.exists():
+        image = image.add_local_file(str(_p), f"/root/app/{_f}")
 
 app = modal.App(APP_NAME)
 
@@ -473,6 +478,114 @@ def run_eval():
 
 
 # ---------------------------------------------------------------------------
+# Model-parameterized pass@k — the "opportunity graph" data (pass@1..8 by
+# difficulty) for ANY base model. evaluate()/passk_one() hardcode gemma +
+# adapter semantics; this serves an arbitrary base model and runs sdpo_passk
+# concurrently against it. vLLM continuous-batches the (concurrency x n)
+# in-flight requests => concurrent generation on the served endpoint. Qwen3-8B
+# think-ON needs a HIGH token cap (8192 -> NO_CODE), so max_tokens defaults to
+# 32768 and max-model-len is sized to fit the prompt + full generation.
+# ---------------------------------------------------------------------------
+@app.function(
+    image=image,
+    gpu="H200",  # overridden per-run via .with_options(gpu=...)
+    cpu=16.0,    # private-test judging is subprocess- + thread-parallel
+    volumes=VOLUMES,
+    secrets=[modal.Secret.from_name("huggingface"), modal.Secret.from_name("wandb")],
+    timeout=3 * 60 * 60,
+)
+def passk_model_remote(model: str, tag: str, languages: str = "python",
+                       n: int = 8, ks: str = "1,2,4,8", max_tokens: int = 32768,
+                       temperature: float = 0.8, system: str = "cp_method",
+                       limit: int = 0, ojb_splits: str = "ojb_splits.json",
+                       wandb: bool = True):
+    import json
+    import os
+    import subprocess
+    import time
+    import urllib.request
+
+    os.chdir("/root/app")
+    os.environ.setdefault("WANDB_PROJECT", APP_NAME)
+    os.environ["OJB_SPLITS"] = ojb_splits   # held-out comes from this split
+    outputs.reload()
+    try:
+        import torch
+        p = torch.cuda.get_device_properties(0)
+        print(f"[passk] GPU: {p.name} ({p.total_memory / 1024**3:.0f} GiB)", flush=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"[passk] GPU probe failed: {e}", flush=True)
+
+    # max-model-len must fit longest prompt + full generation; mirror gen_rollouts
+    # (max_new_tokens + 8192 headroom). enforce-eager dodges the kernel gen hang.
+    max_model_len = max_tokens + 8192
+    serve = ["vllm", "serve", model, "--port", "8000", "--dtype", "bfloat16",
+             "--max-model-len", str(max_model_len), "--gpu-memory-utilization", "0.85",
+             "--max-num-seqs", "32", "--enforce-eager"]
+    print(f"[passk] serving: {' '.join(serve)}", flush=True)
+    srv = subprocess.Popen(serve)
+    ready = False
+    for _ in range(240):  # up to 20 min (first-run weight download)
+        try:
+            urllib.request.urlopen("http://localhost:8000/v1/models", timeout=2)
+            ready = True
+            break
+        except Exception:  # noqa: BLE001
+            if srv.poll() is not None:
+                raise RuntimeError("vLLM server exited during startup")
+            time.sleep(5)
+    if not ready:
+        raise RuntimeError("vLLM server did not become ready")
+    print("[passk] server ready; running sdpo_passk (concurrent)", flush=True)
+
+    cmd = ["python", "sdpo_passk.py", "--served-model", model, "--tag", tag,
+           "--n", str(n), "--ks", ks, "--max-tokens", str(max_tokens),
+           "--temperature", str(temperature), "--languages", languages,
+           "--system", system, "--concurrency", "16"]
+    if limit:
+        cmd += ["--limit", str(limit)]
+    if wandb:
+        cmd += ["--wandb"]
+    try:
+        subprocess.run(cmd, check=True)
+    finally:
+        srv.terminate()
+
+    src = f"sdpo_passk_{tag}.json"
+    res = json.load(open(src))
+    # durable copy on the volume so a killed client doesn't lose the result
+    json.dump(res, open(f"/root/app/sdpo_out/{src}", "w"), indent=2)
+    outputs.commit()
+    hf_cache.commit()  # persist newly-downloaded weights for next run
+    print(f"[passk] wrote {src} (also volume sdpo-outputs:/{src})", flush=True)
+    return res
+
+
+@app.local_entrypoint()
+def passk_base(model: str = "Qwen/Qwen3-8B", tag: str = "", smoke: bool = False,
+               languages: str = "python", n: int = 8, max_tokens: int = 32768,
+               temperature: float = 0.8, system: str = "cp_method", gpu: str = "H200",
+               ojb_splits: str = "ojb_splits.json", out: str = ""):
+    """Opportunity-graph data (pass@1..8 by difficulty) for a base model on Modal.
+      modal run src/modal_sdpo.py::passk_base --smoke   # 2 easy problems, n=2 — validate plumbing
+      modal run src/modal_sdpo.py::passk_base           # full: Qwen3-8B python, 25 heldout, n=8, 32k
+    """
+    import json
+    tag = tag or ("qwen3_smoke" if smoke else "qwen3_base")
+    limit, nn = (2, 2) if smoke else (0, n)
+    print(f"[modal] passk_base gpu={gpu} model={model} tag={tag} smoke={smoke} "
+          f"langs={languages} n={nn} max_tokens={max_tokens} system={system}", flush=True)
+    res = passk_model_remote.with_options(gpu=gpu).remote(
+        model, tag, languages, nn, "1,2,4,8", max_tokens, temperature, system,
+        limit, ojb_splits, True)
+    fname = out or f"sdpo_passk_{tag}.json"
+    with open(fname, "w") as f:
+        json.dump(res, f, indent=2)
+    print(f"[modal] wrote {fname}")
+    print(json.dumps(res["summary"], indent=2))
+
+
+# ---------------------------------------------------------------------------
 # Generate + judge BASE rollouts (gen_rollouts.py) on a fast GPU — the Phase-0
 # probe set. H200 batches thinking-ON generation far better than the GB10. Writes
 # per-rollout to the sdpo-outputs volume (durable + resumable; committed every 60s).
@@ -603,6 +716,133 @@ def gen(smoke: bool = False, gpu: str = "H200", model: str = "Qwen/Qwen3-8B",
     with open(local, "w") as f:
         json.dump(res, f, indent=2)
     print(f"[modal] saved -> {local} (also on volume sdpo-outputs:/{out.split('/',1)[-1]})")
+
+
+# ---------------------------------------------------------------------------
+# Phase-0 teacher eval (teacher_eval.py): solve-rate + per-token A_t for the teacher
+# conditioned on the critic's feedback, on the committed probe set. H200; per-failure
+# durable writes to the sdpo-outputs volume; committer + no-progress watchdog.
+# ---------------------------------------------------------------------------
+@app.function(
+    image=image,
+    gpu="H200",
+    cpu=16.0,
+    volumes=VOLUMES,
+    timeout=4 * 60 * 60,
+)
+def teacher_eval_remote(args: list[str], ojb_splits: str = "ojb_splits.json"):
+    import json
+    import os
+    import signal
+    import subprocess
+    import sys
+    import threading
+    import time
+
+    os.chdir("/root/app")
+    os.environ["OJB_SPLITS"] = ojb_splits
+    outputs.reload()
+
+    try:
+        import torch
+        p = torch.cuda.get_device_properties(0)
+        print(f"[modal] GPU: {p.name} ({p.total_memory / 1024**3:.0f} GiB)", flush=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"[modal] GPU probe failed: {e}", flush=True)
+
+    noi = "/root/app/ojbench_data/NOI"
+    n = len(os.listdir(noi)) if os.path.isdir(noi) else 0
+    print(f"[modal] ojbench test-case dirs visible: {n}", flush=True)
+    assert n > 0, f"{noi} empty — populate the ojbench-data volume first"
+
+    cmd = [sys.executable, "teacher_eval.py", *args]
+    print("[modal] running:", " ".join(cmd), flush=True)
+
+    stop = threading.Event()
+
+    def _committer():
+        while not stop.wait(60):
+            try:
+                outputs.commit()
+            except Exception as e:  # noqa: BLE001
+                print(f"[modal] periodic commit failed: {e}", flush=True)
+
+    threading.Thread(target=_committer, daemon=True).start()
+
+    STALL = int(os.environ.get("WATCHDOG_STALL_SECS", "1800"))
+    last = [time.time()]
+    killed = [False]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, bufsize=1, start_new_session=True)
+
+    def _reader():
+        for line in proc.stdout:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            last[0] = time.time()
+
+    def _watchdog():
+        while proc.poll() is None:
+            if stop.wait(30):
+                return
+            if time.time() - last[0] > STALL:
+                print(f"[modal] WATCHDOG: no output for >{STALL}s — killing", flush=True)
+                killed[0] = True
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    pass
+                return
+
+    threading.Thread(target=_reader, daemon=True).start()
+    threading.Thread(target=_watchdog, daemon=True).start()
+    try:
+        rc = proc.wait()
+    finally:
+        stop.set()
+        outputs.commit()
+        hf_cache.commit()
+    if killed[0]:
+        raise RuntimeError("teacher_eval killed by watchdog — partial committed; rerun --resume")
+    if rc != 0:
+        raise RuntimeError(f"teacher_eval.py exited {rc}")
+    out_path = args[args.index("--out") + 1] if "--out" in args else "teacher_eval.json"
+    return json.load(open(out_path))
+
+
+@app.local_entrypoint()
+def teacher_eval(smoke: bool = False, gpu: str = "H200", model: str = "Qwen/Qwen3-8B",
+                 critic_set: str = "sonnet_verbose", samples: int = 8,
+                 max_new_tokens: int = 32768, gpu_util: float = 0.85, resume: bool = True,
+                 out: str = ""):
+    """Phase-0 teacher eval on Modal: solve-rate + A_t for teacher = x + critique.
+      modal run src/modal_sdpo.py::teacher_eval --smoke   # 1 failure, K=2 — validate wiring
+      modal run src/modal_sdpo.py::teacher_eval           # all 9 failures, K=8
+    """
+    import json
+
+    out = out or ("sdpo_out/teacher_eval_smoke.json" if smoke else "sdpo_out/teacher_eval.json")
+    args = ["--model", model, "--rollouts", "/root/app/qwen3_rollouts.json",
+            "--critiques", "/root/app/qwen3_critiques.json", "--critic-set", critic_set,
+            "--samples", str(2 if smoke else samples), "--max-new-tokens", str(max_new_tokens),
+            "--gpu-util", str(gpu_util), "--out", out]
+    if smoke:
+        args += ["--limit", "1"]
+    if resume:
+        args.append("--resume")
+    print(f"[modal] gpu={gpu} smoke={smoke} critic_set={critic_set} args={args}", flush=True)
+    res = teacher_eval_remote.with_options(gpu=gpu).remote(args)
+    r = res.get("results", [])
+    print(f"\n[modal] {len(r)} failures evaluated (critic={critic_set}):")
+    for x in r:
+        a = x["advantage"]
+        print(f"  {x['difficulty']} loj-{x['id']} s{x['sample']} [{x['base_verdict']}]: "
+              f"solve-rate {x['solve_rate']} | A_t mean|.|={a['mean_abs']} "
+              f"frac_neg={a['frac_neg']} code/reas={a['code_region_abs']}/{a['reasoning_abs']}")
+    local = out.split("/")[-1]
+    with open(local, "w") as f:
+        json.dump(res, f, indent=2)
+    print(f"[modal] saved -> {local} (volume sdpo-outputs:/{out.split('/',1)[-1]})")
 
 
 # ---------------------------------------------------------------------------

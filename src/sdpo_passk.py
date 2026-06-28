@@ -51,6 +51,8 @@ def main():
     ap.add_argument("--temperature", type=float, default=0.8)
     ap.add_argument("--top-p", type=float, default=0.95)
     ap.add_argument("--languages", default="python,cpp")
+    ap.add_argument("--limit", type=int, default=0,
+                    help="cap to first N tasks (easy-first) for a cheap smoke; 0 = all")
     ap.add_argument("--concurrency", type=int, default=16)
     ap.add_argument("--single-sample", action="store_true",
                     help="issue n separate n=1 requests instead of one n-sample request "
@@ -72,6 +74,12 @@ def main():
         for pid in SPLITS["heldout"]:
             if pid in pmap:
                 tasks.append((lang, pid, pmap[pid]))
+
+    if args.limit:
+        # easy-first so a small smoke still exercises the AC (not just NO_CODE) path
+        rank = {"easy": 0, "medium": 1, "hard": 2}
+        tasks.sort(key=lambda t: rank.get(DIFF_BY_ID[t[1]], 9))
+        tasks = tasks[:args.limit]
 
     sys_msg = [{"role": "system", "content": SYSTEM}] if SYSTEM else []
 

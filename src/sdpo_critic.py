@@ -69,8 +69,17 @@ writing the algorithm.
 division by zero) and the condition under which it triggers.
    - CE: name the compilation error and the language rule it violates.
 
-5. BE CONCISE. A few sentences. No preamble, no full restatement of the problem, no encouragement \
-filler. Write as direct second-person feedback about "your attempt"."""
+5. OUTPUT ONLY THE FINAL FEEDBACK. Direct second-person ("your attempt"). No preamble, no restating \
+the problem, no encouragement filler — and critically, do NOT narrate your reasoning or self-correct \
+in the response (no "wait", "actually", "let me reconsider", no exploring then rejecting alternatives). \
+State your conclusion directly and confidently."""
+
+# Appended in terse mode — the A/B counterpart to the (verbose) default, to test in Phase 0
+# whether a tighter signal teaches the student as well while saving tokens (reports/iteration-05).
+_TERSE_DIRECTIVE = """
+
+BREVITY MODE: Your entire response must be AT MOST 3 short sentences — one naming what is correct, \
+one naming the specific error, one naming the fix direction. No code, no lists, nothing else."""
 
 _USER_TEMPLATE = """\
 PROBLEM ({lang}):
@@ -88,20 +97,22 @@ Write the trace-aligned feedback now, following the rules. Anchor what is correc
 first error, describe (do not write) the fix."""
 
 
-def build_critic_messages(problem, student_code, verdict, judge_feedback, lang):
+def build_critic_messages(problem, student_code, verdict, judge_feedback, lang, style="verbose"):
     """Pure prompt assembly — returns (system, messages). Offline-testable (no API call).
 
     `judge_feedback` is the deterministic `_format_feedback` text (verdict + failing I/O),
     reused verbatim as the critic's raw material. `verdict` is passed through for callers
     that want to gate (e.g. skip the critic on NO_CODE/CE) but is not re-templated here.
+    `style`: "verbose" (default) or "terse" (≤3 sentences) — the Phase-0 A/B knob.
     """
+    system = _CRITIC_SYSTEM + (_TERSE_DIRECTIVE if style == "terse" else "")
     user = _USER_TEMPLATE.format(
         lang=lang,
         problem=problem,
         student_code=student_code or "(no parseable code block)",
         judge_feedback=judge_feedback,
     )
-    return _CRITIC_SYSTEM, [{"role": "user", "content": user}]
+    return system, [{"role": "user", "content": user}]
 
 
 def critique(
@@ -111,6 +122,7 @@ def critique(
     judge_feedback,
     lang,
     *,
+    style="verbose",
     model=DEFAULT_CRITIC_MODEL,
     max_tokens=1024,
     thinking=False,
@@ -137,7 +149,7 @@ def critique(
             load_env()  # picks up ANTHROPIC_API_KEY from repo-root .env (no-op in Modal)
             client = anthropic.Anthropic(timeout=timeout, max_retries=max_retries)
         system, messages = build_critic_messages(
-            problem, student_code, verdict, judge_feedback, lang
+            problem, student_code, verdict, judge_feedback, lang, style=style
         )
         kwargs = dict(model=model, max_tokens=max_tokens, system=system, messages=messages)
         if thinking:

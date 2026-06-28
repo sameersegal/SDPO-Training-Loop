@@ -8,5 +8,25 @@
     "link": "/?report=summary_feedback_alignment_sd.md&hl=aligned%20feedback%20concentrates%20the%20negative%20advantage%20at%20the%20error-adjacent%20tokens%20and%20reinforces%20the%20correct%20surrounding%20steps%20%28PRM-like%29%2C%20whereas%20the%20reference%20solution%20diverges%20in%20surface%20form%20even%20",
     "url": "http://192.168.1.29:7500/?report=summary_feedback_alignment_sd.md&hl=aligned%20feedback%20concentrates%20the%20negative%20advantage%20at%20the%20error-adjacent%20tokens%20and%20reinforces%20the%20correct%20surrounding%20steps%20%28PRM-like%29%2C%20whereas%20the%20reference%20solution%20diverges%20in%20surface%20form%20even%20",
     "created": "2026-06-28T06:57:17"
+  },
+  {
+    "id": "ceec93d9",
+    "report": "summary_sdpo_original.md",
+    "title": "Reinforcement Learning via Self-Distillation (the original SDPO paper)",
+    "text": "Measure teacher-vs-student accuracy on Gemma-E2B with our judge feedback before trusting train-time SDPO — if the teacher isn't better, the method has no signal at our scale",
+    "note": "Teacher signal had to be present",
+    "link": "/?report=summary_sdpo_original.md&hl=Measure%20teacher-vs-student%20accuracy%20on%20Gemma-E2B%20with%20our%20judge%20feedback%20before%20trusting%20train-time%20SDPO%20%E2%80%94%20if%20the%20teacher%20isn%27t%20better%2C%20the%20method%20has%20no%20signal%20at%20our%20scale",
+    "url": "http://192.168.1.29:7500/?report=summary_sdpo_original.md&hl=Measure%20teacher-vs-student%20accuracy%20on%20Gemma-E2B%20with%20our%20judge%20feedback%20before%20trusting%20train-time%20SDPO%20%E2%80%94%20if%20the%20teacher%20isn%27t%20better%2C%20the%20method%20has%20no%20signal%20at%20our%20scale",
+    "created": "2026-06-28T08:22:14"
+  },
+  {
+    "id": "76d79dd8",
+    "report": "summary_sdpo_original.md",
+    "title": "Reinforcement Learning via Self-Distillation (the original SDPO paper)",
+    "text": "Judge as it's read by the model: make OJBench feedback LeetCode-shaped (error type + location + failing input)",
+    "note": "Judge feedback leet code style",
+    "link": "/?report=summary_sdpo_original.md&hl=Judge%20as%20it%27s%20read%20by%20the%20model%3A%20make%20OJBench%20feedback%20LeetCode-shaped%20%28error%20type%20%2B%20location%20%2B%20failing%20input%29",
+    "url": "http://192.168.1.29:7500/?report=summary_sdpo_original.md&hl=Judge%20as%20it%27s%20read%20by%20the%20model%3A%20make%20OJBench%20feedback%20LeetCode-shaped%20%28error%20type%20%2B%20location%20%2B%20failing%20input%29",
+    "created": "2026-06-28T08:23:01"
   }
 ]

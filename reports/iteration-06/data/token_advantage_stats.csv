@@ -1,0 +1,4 @@
+difficulty,id,verdict,reward,context,n_tokens,frac_neg,frac_pos,mean_A,mean_absA,min_A,max_A,code_fence_idx,reasoning_meanabs,code_meanabs
+easy,2314,AC,1.0,solution(AC group-mate),762,0.448,0.232,-0.3808,0.4487,-21.62,2.57,541,0.5595,0.1776
+medium,2086,TLE,0.67,feedback(judge),2377,0.34,0.312,-0.0002,0.0222,-3.36,0.81,1599,0.0267,0.013
+hard,2083,TLE,0.7,feedback(judge),4859,0.389,0.34,-0.0015,0.019,-1.42,1.35,3953,0.0219,0.006

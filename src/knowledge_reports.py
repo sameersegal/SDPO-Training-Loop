@@ -54,10 +54,23 @@ class Store:
 
     # --- reports -------------------------------------------------------
     def list_reports(self):
-        out = []
-        for p in sorted(self.root.glob("summary_*.md")):
-            out.append({"file": p.name, "title": self._title(p)})
-        return out
+        # Order by arXiv id (chronological) == lineage reading order: a paper can
+        # only cite earlier ones, so oldest-first puts prerequisites before the
+        # papers that build on them. Self-maintaining as new summaries are added.
+        reps = [(self._arxiv_id(p), p.name, self._title(p))
+                for p in self.root.glob("summary_*.md")]
+        reps.sort(key=lambda r: (r[0], r[1]))
+        return [{"file": n, "title": t, "arxiv": a} for a, n, t in reps]
+
+    @staticmethod
+    def _arxiv_id(p: Path) -> str:
+        try:
+            m = re.search(r"arxiv\.org/abs/(\d{4}\.\d{4,5})", p.read_text(encoding="utf-8"))
+            if m:
+                return m.group(1)
+        except OSError:
+            pass
+        return "9999.99999"  # unknown -> sort last
 
     @staticmethod
     def _title(p: Path) -> str:
@@ -140,7 +153,7 @@ PAGE = r'''<!doctype html>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <style>
-  :root { color-scheme: light dark; --fg:#1f2328; --bg:#f6f8fa; --card:#fff; --bd:#d0d7de; --mut:#57606a; --acc:#1a7f37; }
+  :root { color-scheme: light dark; --fg:#1f2328; --bg:#f6f8fa; --card:#fff; --bd:#d0d7de; --mut:#57606a; --acc:#1a7f37; --topbar-h:48px; }
   @media (prefers-color-scheme: dark){ :root{ --fg:#e6edf3; --bg:#0d1117; --card:#161b22; --bd:#30363d; --mut:#8b949e; --acc:#3fb950; } }
   * { box-sizing: border-box; }
   html, body { width:100%; max-width:100%; overflow-x:hidden; }
@@ -153,6 +166,8 @@ PAGE = r'''<!doctype html>
   .rlink { display:block; padding:6px 8px; border-radius:6px; cursor:pointer; font-size:13px; color:inherit; text-decoration:none; }
   .rlink:hover { background:var(--bg); }
   .rlink.active { background:var(--acc); color:#fff; font-weight:600; }
+  .rlink .rnum { color:var(--mut); font-variant-numeric:tabular-nums; }
+  .rlink.active .rnum { color:#fff; opacity:.85; }
   main { padding:26px 38px 80px; max-width:880px; min-width:0; width:100%; margin:0 auto; }
   .content { font-size:15.5px; min-width:0; max-width:100%; overflow-wrap:break-word; }
   .content > * { max-width:100%; }
@@ -191,9 +206,10 @@ PAGE = r'''<!doctype html>
   .topbar { display:none; }
   .backdrop { display:none; }
   @media (max-width: 1100px){
-    .layout { grid-template-columns:minmax(0,1fr); }
-    .topbar { display:flex; gap:8px; align-items:center; position:sticky; top:0; z-index:65;
-      background:var(--card); border-bottom:1px solid var(--bd); padding:8px 10px; }
+    .layout { grid-template-columns:minmax(0,1fr); padding-top:calc(var(--topbar-h) + env(safe-area-inset-top)); }
+    .topbar { display:flex; gap:8px; align-items:center; position:fixed; top:0; left:0; right:0;
+      min-height:calc(var(--topbar-h) + env(safe-area-inset-top)); z-index:65; transform:translateZ(0);
+      background:var(--card); border-bottom:1px solid var(--bd); padding:calc(8px + env(safe-area-inset-top)) 10px 8px; }
     .topbar button { background:none; border:1px solid var(--bd); border-radius:6px; color:inherit;
       padding:6px 11px; font-size:14px; cursor:pointer; white-space:nowrap; }
     .topbar .ttl { flex:1; min-width:0; text-align:center; font-size:13px; color:var(--mut);
@@ -209,6 +225,7 @@ PAGE = r'''<!doctype html>
     main { padding:18px 14px 70px; max-width:none; }
     .content { font-size:15px; }
     .content p .katex, .content li .katex { white-space:normal; }
+    mark.hl { scroll-margin-top:calc(var(--topbar-h) + env(safe-area-inset-top) + 12px); }
   }
 </style></head>
 <body>
@@ -297,8 +314,8 @@ function markText(text, id, flash){
 // --- data loading ----------------------------------------------------
 async function loadReports(){
   const reports = await (await fetch("/api/reports")).json();
-  reportsEl.innerHTML = reports.map(r =>
-    `<a class="rlink" data-file="${esc(r.file)}" title="${esc(r.file)}">${esc(r.title)}</a>`).join("");
+  reportsEl.innerHTML = reports.map((r,i) =>
+    `<a class="rlink" data-file="${esc(r.file)}" title="${esc(r.file)}"><span class="rnum">${i+1}.</span> ${esc(r.title)}</a>`).join("");
   reportsEl.querySelectorAll(".rlink").forEach(a =>
     a.addEventListener("click", () => openReport(a.dataset.file)));
   return reports;

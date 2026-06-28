@@ -212,3 +212,11 @@ client restart, and be resumable. Non-negotiables:
 ## Stopping GPU jobs
 Kill training/serve jobs by **PID or tmux session**, never `pkill -f vllm` (collateral damage).
 Long runs are launched in detached tmux (local) or `modal run --detach` (cloud).
+- **Killing the Python parent ORPHANS the vLLM `EngineCore` subprocess, which keeps holding the GPU.**
+  Killing `python …` (or `pkill -f gen_rollouts`) leaves a `VLLM::EngineCore` proc pinning ~`gpu_util`×VRAM
+  (~101 GB at 0.85 on the GB10) → the next run **OOMs at engine init**. After any kill, verify the GPU is
+  actually free with **`nvidia-smi --query-compute-apps=pid,used_memory --format=csv`** (this works on the
+  GB10 even though the `memory.used` query returns N/A) and `kill -9` any leftover `EngineCore` before relaunching.
+- **`pkill -f <script>.py` can kill your own shell** — the pattern matches the launching command's own
+  cmdline. Use a regex that can't self-match (e.g. `pkill -f 'gen_rollouts[.]py'`) and never put the
+  relaunch command in the same shell line as the `pkill`.

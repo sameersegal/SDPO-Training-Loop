@@ -34,6 +34,8 @@ results_gsm8k*.json
 sdpo_eval_*.json
 
 # logs & scratch
+scratch_tadv/
+scratch_*/
 *.log
 _sol_*.py
 _cpp_*

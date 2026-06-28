@@ -71,6 +71,15 @@ context our pipeline feeds. Red = keep, blue = change; dashed line = start of th
 (Full per-token arrays: [`data/token_advantage.json`](data/token_advantage.json); stats:
 [`data/token_advantage_stats.csv`](data/token_advantage_stats.csv).)
 
+**Corroborate the graph against the actual text.** For each of the three cases,
+[`data/token_advantage_cases.md`](data/token_advantage_cases.md) dumps the exact **student prompt**
+(question only), **teacher prompt** (question + the inserted context `c`), and the **completion `ŷ`**
+that both score — plus the full group of 8 rollouts that determined which context was chosen. The two
+prompts differ *only* by `c` (easy: a "Correct solution: …" reprompt carrying the AC group-mate's
+code; medium/hard: a "feedback from your unsuccessful earlier attempt: Verdict: TLE …" reprompt). The
+figure's x-axis indexes directly into that completion (token 0 = first token after the prompt), so a
+blue region at token *t* means *c* lowered the teacher's logprob for the completion's *t*-th token.
+
 **Finding 1 — the solution arm is RefSol-diffuse and *fights correct code*.** On easy, all 8 rollouts
 AC'd, so the teacher sees a *different* correct solution. The advantage is **broadly negative (45% of
 tokens, mean −0.38, spikes to −21.6) across the entire rollout — even though the scored rollout is

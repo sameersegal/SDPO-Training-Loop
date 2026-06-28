@@ -123,6 +123,12 @@ def prompt_ids_for(tok, messages):
                                    return_tensors="pt", return_dict=True)["input_ids"].to("cuda")
 
 
+def render_prompt_text(tok, messages):
+    """The exact string the model is fed (chat template applied, with the generation
+    prompt appended) — so the dumped prompt corroborates the scored token positions."""
+    return tok.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+
+
 def code_block_token_index(tok, completion_ids):
     """Token index where the ```python (or ```) code fence starts, for a marker line."""
     text = tok.decode(completion_ids[0], skip_special_tokens=True)
@@ -187,14 +193,28 @@ def analyze_difficulty(model, tok, diff, pid, language, system_text, args):
     teacher_lp = completion_token_logprobs(model, teacher_ids, ct)
     adv = (teacher_lp - student_lp).cpu().tolist()
 
+    # per-rollout group summary (lets the reader see why this context was chosen)
+    group = [{"idx": k, "verdict": judged[k]["verdict"], "reward": judged[k]["reward"],
+              "n_tok": int(comp_ids[k].shape[1]),
+              "is_target": k == target, "is_ac_demo": k == ac_idx and has_solution}
+             for k in range(len(judged))]
+
     return {
         "difficulty": diff, "id": pid, "language": language,
         "verdict": judged[target]["verdict"], "reward": judged[target]["reward"],
+        "target_idx": target, "ac_demo_idx": (ac_idx if has_solution else None),
         "group_has_success": group_has_success, "context_kind": ctx_kind,
         "context_text": (demo if demo else fb_raw) or "",
         "n_tokens": len(adv), "advantages": adv,
         "code_fence_idx": code_block_token_index(tok, ct),
         "feedback_all": [j["feedback"] for j in judged],
+        # full prompt + completion for corroboration with the graph (chat-template
+        # applied = exactly what the model is fed). The graph's token positions index
+        # into `completion`; teacher and student score that SAME completion.
+        "student_prompt": render_prompt_text(tok, messages),
+        "teacher_prompt": render_prompt_text(tok, teacher_msgs),
+        "completion": texts[target],
+        "group": group,
     }
 
 
@@ -225,6 +245,44 @@ def plot(results, out_png):
     fig.tight_layout(rect=[0, 0, 1, 0.98])
     fig.savefig(out_png, dpi=130)
     print(f"wrote {out_png}", flush=True)
+
+
+def write_cases_md(meta, results, out_md):
+    """Human-readable per-case dump: group summary + the exact STUDENT prompt,
+    TEACHER prompt, and the scored COMPLETION, so the graph can be corroborated."""
+    L = [f"# Per-token advantage — prompts & completions",
+         "",
+         f"Model `{meta['model']}` · system `{meta['system']}` · language `{meta['language']}`.",
+         "",
+         "For each difficulty: the **student prompt** (question only), the **teacher prompt** "
+         "(question + privileged context `c`, assembled by our SDPO gating), and the **completion** "
+         "`ŷ` that both score. The figure's per-token advantage "
+         "`A_t = log π(ŷ_t | teacher_prompt) − log π(ŷ_t | student_prompt)` indexes into that "
+         "completion (token 0 = first token after the prompt). The teacher and student prompts "
+         "differ **only** by the inserted context `c`; the completion is identical.",
+         ""]
+    for r in results:
+        L += [f"---", "",
+              f"## {r['difficulty'].upper()} — loj-{r['id']} [{r['language']}]", "",
+              f"- **Visualized rollout:** #{r['target_idx']} — **{r['verdict']}** "
+              f"(reward {r['reward']:.2f}), {r['n_tokens']} tokens",
+              f"- **Context `c`:** {r['context_kind']}"
+              + (f" (AC demo = rollout #{r['ac_demo_idx']})" if r['ac_demo_idx'] is not None else ""),
+              f"- **Code fence starts at token:** {r['code_fence_idx']}",
+              "",
+              "**Group rollouts (why this context):**", "",
+              "| # | verdict | reward | tokens | role |",
+              "|---|---|---|---|---|"]
+        for g in r["group"]:
+            role = "← visualized" if g["is_target"] else ("AC demo (context)" if g["is_ac_demo"] else "")
+            L.append(f"| {g['idx']} | {g['verdict']} | {g['reward']:.2f} | {g['n_tok']} | {role} |")
+        L += ["",
+              "### Student prompt (question only)", "", "````text", r["student_prompt"], "````", "",
+              "### Teacher prompt (question + context `c`)", "", "````text", r["teacher_prompt"], "````", "",
+              "### Completion ŷ (scored by both; graph x-axis indexes these tokens)", "",
+              "````text", r["completion"], "````", ""]
+    out_md.write_text("\n".join(L), encoding="utf-8")
+    print(f"wrote {out_md}", flush=True)
 
 
 def main():
@@ -270,10 +328,11 @@ def main():
         results.append(analyze_difficulty(model, tok, diff, chosen[diff],
                                            args.language, system_text, args))
 
+    meta = {"model": args.model, "system": args.system, "language": args.language}
     out_json = ROOT / f"{args.out_prefix}.json"
-    json.dump({"model": args.model, "system": args.system, "language": args.language,
-               "results": results}, open(out_json, "w"), indent=2)
+    json.dump({**meta, "results": results}, open(out_json, "w"), indent=2)
     print(f"wrote {out_json}", flush=True)
+    write_cases_md(meta, results, ROOT / f"{args.out_prefix}_cases.md")
     plot(results, ROOT / f"{args.out_prefix}.png")
     print(f"done in {time.perf_counter() - t0:.0f}s", flush=True)
 

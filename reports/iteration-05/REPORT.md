@@ -89,9 +89,9 @@ best in-context priors for. (`src/sdpo_feedback.py` `_LiveFeedbackBuilder`, `_fo
 - **LoRA targets get SIMPLER.** Qwen3-8B is a standard text-only decoder → target
   `q,k,v,o,gate,up,down`_proj across **all** layers (no `language_model.*` prefix, no vision/audio
   towers, no `k_norm` merge bug). `max-lora-rank 32`, bf16, as before.
-- **Thinking mode — decide.** Qwen3 has think on/off. Lean **thinking-ON** for a stronger
-  self-teacher on code reasoning (it's *why* 8B clears the bar) — consistent with the no-cap choice
-  below, at the cost of long generations. Flag explicitly; revisit if lengths/cost explode.
+- **Thinking mode — DECIDED: ON.** Qwen3 think-ON for a stronger self-teacher on code reasoning
+  (it's *why* 8B clears the bar) — consistent with the no-cap choice below, at the cost of long
+  generations. Revisit only if lengths/cost explode.
 - **Smoke** `sdpo_train.py --smoke --feedback --reward-mode fraction` on GB10 to validate wiring
   (loads, LoRA attaches, dense reward + feedback fire, adapter saves). Memory note: **8B + colocate
   vLLM + no token cap is H200 territory** — the smoke proves wiring; the real run is **Modal H200**.
@@ -106,9 +106,9 @@ best in-context priors for. (`src/sdpo_feedback.py` `_LiveFeedbackBuilder`, `_fo
   A/B is a deliberate downstream experiment, not for run #1.
 - **T0-3 — Demote distillation, verifier-dominant.** `distillation_weight` **down from 1.0** (the
   "pure" value that collapsed us at 2B). **Nuance for 8B:** the paper's 8B win used *strong*
-  distillation, so don't crank to SDPG's 1e-3 either — **start moderate (~0.3), reward dominant, and
-  let the canaries arbitrate.** For only 20 steps, skip the full warmup-decay *schedule* (it earns
-  its keep on long runs via end-decay); constant low weight here. `sdpo_train.py:130`.
+  distillation, so don't crank to SDPG's 1e-3 either — **DECIDED: `distillation_weight=0.3`**
+  (constant), reward dominant, canary-arbitrated. For only 20 steps, skip the full warmup-decay
+  *schedule* (it earns its keep on long runs via end-decay). `sdpo_train.py:130`.
 - **T0-4 — Two-sided canaries (kill signals).** Log per step to W&B: completion **length** (natural,
   uncapped), **TruncRate** (`finish_reason=="length"`; ≈0 by construction with no cap — that's the
   point, we *observe* natural length), **RepRate** (zlib ratio of last 10k chars > 10), **policy
@@ -131,8 +131,8 @@ feedback-ON, and a **simple frontier band** for the 20 steps — easy + sometime
 "activate-the-gate" band) — rather than the full moving-frontier curriculum. Goal is *one clean run*,
 not the full curriculum; that's downstream.
 
-**Optional (T1, cheap insurance, not required):** a light frozen-base **KL anchor** to protect
-easy/GSM8K. Include only if it doesn't add integration risk to run #1.
+**KL anchor — DECIDED: OUT of run #1.** Keep the first run minimal (fewer integration variables);
+revisit as T1 insurance for the longer downstream run.
 
 ---
 
@@ -157,11 +157,12 @@ easy/GSM8K. Include only if it doesn't add integration risk to run #1.
    `--max-steps 20 --save-steps 2`, feedback-ON, dense reward, canaries on, decoupled + watchdog + resume.
 5. Eval (held-out pass@k n≥8 + GSM8K) base vs adapter; read canaries; **decide downstream.**
 
-## Open decisions to finalize before launch
-(a) thinking-mode on/off; (b) starting `distillation_weight` (~0.3 proposed — canary-arbitrated);
-(c) probe-set size/composition for Phase 0 and the GO threshold on `Δ_correct` (calibrate on a few
-easy problems where feedback *obviously* should help); (d) data band for the 20 steps; (e) KL anchor
-in or out of run #1; (f) confirm Qwen3-8B H200 memory headroom under no-cap long generations.
+## Decisions (locked) & remaining open items
+**Locked:** thinking-mode **ON**; `distillation_weight` **0.3** (constant, canary-arbitrated); **KL
+anchor OUT** of run #1; teacher **fixed** (not EMA); **no token cap**; **≤20 steps**, `save-steps 2`.
+**Still to settle at run time:** (c) Phase-0 probe-set size/composition and the GO threshold on
+`Δ_correct` (calibrate on a few easy problems where feedback *obviously* should help); (d) data band
+for the 20 steps; (f) confirm Qwen3-8B H200 memory headroom under no-cap long generations.
 
 ## Provenance (to fill on run)
 - Model: `Qwen/Qwen3-8B`. Probe: `data/logprob_gate.json` (Δ_correct, A_t). Adapter: Modal

@@ -80,6 +80,11 @@ code; medium/hard: a "feedback from your unsuccessful earlier attempt: Verdict: 
 figure's x-axis indexes directly into that completion (token 0 = first token after the prompt), so a
 blue region at token *t* means *c* lowered the teacher's logprob for the completion's *t*-th token.
 
+> **See also [INSIGHTS.md](INSIGHTS.md)** — when SDPO can/can't work (the two failure modes below as
+> general principles), plus an **accuracy probe** that confirms, by solve-rate, that conditioning the
+> teacher on our feedback gives **0/8 → 0/8** on medium/hard (no capability gap at ~2B):
+> [`data/teacher_accuracy_probe.md`](data/teacher_accuracy_probe.md).
+
 **Finding 1 — the solution arm is RefSol-diffuse and *fights correct code*.** On easy, all 8 rollouts
 AC'd, so the teacher sees a *different* correct solution. The advantage is **broadly negative (45% of
 tokens, mean −0.38, spikes to −21.6) across the entire rollout — even though the scored rollout is

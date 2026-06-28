@@ -1,0 +1,174 @@
+{
+  "model": "google/gemma-4-E2B-it",
+  "system": "cp_method",
+  "language": "python",
+  "rows": [
+    {
+      "difficulty": "easy",
+      "id": 2314,
+      "context": "solution",
+      "student": {
+        "n": 8,
+        "ac": 8,
+        "mean_reward": 1.0,
+        "verdicts": {
+          "AC": 8
+        }
+      },
+      "teacher": {
+        "mode": "solution(answer handed over)",
+        "skipped": true,
+        "note": "student already solves (group has an AC); solution-context is not an informative gap probe"
+      }
+    },
+    {
+      "difficulty": "medium",
+      "id": 2086,
+      "context": "feedback",
+      "student": {
+        "n": 8,
+        "ac": 0,
+        "mean_reward": 0.521,
+        "verdicts": {
+          "WA": 2,
+          "TLE": 6
+        }
+      },
+      "teacher": {
+        "mode": "feedback",
+        "n": 8,
+        "ac": 0,
+        "mean_reward": 0.438,
+        "verdicts": {
+          "TLE": 5,
+          "WA": 1,
+          "RE": 2
+        },
+        "attempts": [
+          {
+            "fb_idx": 0,
+            "sample": 0,
+            "verdict": "TLE",
+            "reward": 0.667
+          },
+          {
+            "fb_idx": 1,
+            "sample": 0,
+            "verdict": "TLE",
+            "reward": 0.667
+          },
+          {
+            "fb_idx": 2,
+            "sample": 0,
+            "verdict": "WA",
+            "reward": 0.167
+          },
+          {
+            "fb_idx": 3,
+            "sample": 0,
+            "verdict": "RE",
+            "reward": 0.0
+          },
+          {
+            "fb_idx": 4,
+            "sample": 0,
+            "verdict": "RE",
+            "reward": 0.0
+          },
+          {
+            "fb_idx": 5,
+            "sample": 0,
+            "verdict": "TLE",
+            "reward": 0.667
+          },
+          {
+            "fb_idx": 6,
+            "sample": 0,
+            "verdict": "TLE",
+            "reward": 0.667
+          },
+          {
+            "fb_idx": 7,
+            "sample": 0,
+            "verdict": "TLE",
+            "reward": 0.667
+          }
+        ]
+      }
+    },
+    {
+      "difficulty": "hard",
+      "id": 2083,
+      "context": "feedback",
+      "student": {
+        "n": 8,
+        "ac": 0,
+        "mean_reward": 0.438,
+        "verdicts": {
+          "TLE": 5,
+          "WA": 3
+        }
+      },
+      "teacher": {
+        "mode": "feedback",
+        "n": 8,
+        "ac": 0,
+        "mean_reward": 0.612,
+        "verdicts": {
+          "TLE": 7,
+          "WA": 1
+        },
+        "attempts": [
+          {
+            "fb_idx": 0,
+            "sample": 0,
+            "verdict": "TLE",
+            "reward": 0.7
+          },
+          {
+            "fb_idx": 1,
+            "sample": 0,
+            "verdict": "TLE",
+            "reward": 0.7
+          },
+          {
+            "fb_idx": 2,
+            "sample": 0,
+            "verdict": "TLE",
+            "reward": 0.7
+          },
+          {
+            "fb_idx": 3,
+            "sample": 0,
+            "verdict": "TLE",
+            "reward": 0.7
+          },
+          {
+            "fb_idx": 4,
+            "sample": 0,
+            "verdict": "WA",
+            "reward": 0.0
+          },
+          {
+            "fb_idx": 5,
+            "sample": 0,
+            "verdict": "TLE",
+            "reward": 0.7
+          },
+          {
+            "fb_idx": 6,
+            "sample": 0,
+            "verdict": "TLE",
+            "reward": 0.7
+          },
+          {
+            "fb_idx": 7,
+            "sample": 0,
+            "verdict": "TLE",
+            "reward": 0.7
+          }
+        ]
+      }
+    }
+  ]
+}

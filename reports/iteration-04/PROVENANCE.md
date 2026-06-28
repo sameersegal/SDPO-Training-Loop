@@ -23,12 +23,29 @@ PYTHONPATH=../../src OJB_SPLITS=ojb_splits_full.json \
   --out-prefix token_advantage
 ```
 
+## Accuracy probe (follow-up, same setup)
+- Script: `src/probe_teacher_accuracy.py` — reuses `data/token_advantage.json` (student verdicts +
+  per-rollout feedback); generates teacher completions conditioned on that feedback and judges them.
+- Command (decoupled, ~67 min on GB10):
+  ```bash
+  cd runs/iteration-04
+  PYTHONPATH=../../src OJB_SPLITS=ojb_splits_full.json \
+    ../../.venv/bin/python ../../src/probe_teacher_accuracy.py \
+    --in-json ../../reports/iteration-04/data/token_advantage.json \
+    --difficulties easy,medium,hard --max-new-tokens 8192
+  ```
+- Result: medium 0/8→0/8, hard 0/8→0/8 (no AC gap); easy skipped (solution-context). See
+  `data/teacher_accuracy_probe.md` and INSIGHTS.md.
+
 ## Committed artifacts
 - `figures/token_advantage.png` — main figure (8192-token budget, all 3 difficulties).
 - `figures/token_advantage_2048.png` — earlier 2048-token pass (shows base NO_CODE on medium/hard).
 - `data/token_advantage.json` — per-token A_t arrays + metadata + judge feedback for the group.
 - `data/token_advantage_2048.json` — same for the 2048-token pass.
 - `data/token_advantage_stats.csv` — summary stats per difficulty.
+- `data/token_advantage_cases.md` — per-case student prompt + teacher prompt + completion.
+- `data/teacher_accuracy_probe.md` / `.json` — accuracy probe (student vs teacher-with-feedback).
+- `INSIGHTS.md` — when SDPO can/can't work; the two failure modes + probe synthesis.
 
 ## Raw (gitignored, under runs/iteration-04/)
-- `tadv.log`, `RUNNING_TADV.txt`, `token_advantage_2048.*`.
+- `tadv.log`, `probe.log`, `RUNNING_TADV.txt`, `RUNNING_PROBE.txt`, `token_advantage_2048.*`.

@@ -188,6 +188,17 @@ The escalation ladder, cheapest first: **unit tests** (`pytest tests/`, seconds,
   Modal smoke when a GB10 smoke already exercised the same path, and prefer one well-instrumented long
   run (checkpoints, W&B, eval-ready) over several timid short ones. When unsure of per-step cost, launch
   the long run but **watch the first few steps** and kill early if the cadence/budget doesn't add up.
+- **Watch machine utilization, not just progress — an idle GPU is wasted wall-clock.** When monitoring
+  any GPU job, check the vLLM/engine telemetry (**GPU KV-cache usage %, Running vs Waiting request
+  counts, tokens/s**) and `nvidia-smi`, and ask: *is the GPU actually saturated, or are we leaving
+  performance on the table?* Low KV-cache % with a deep Waiting queue (e.g. eval ran 16 concurrent at
+  6–18% KV on an H200 → ~3× headroom unused) means concurrency/batch is too low. **If a job is plainly
+  under-utilizing the hardware, cancel it and relaunch with better params** (higher `--max-num-seqs` +
+  client `--concurrency`, bigger batch, more GPUs/parallel shards) rather than letting it grind — the
+  restart cost is minutes, the wasted idle time is hours. **Time is more valuable than money:** spending
+  a little more on bigger/more concurrent hardware to finish sooner beats a cheap job that idles for
+  hours. Pick the parameters that *saturate* the box (watch KV stays under the `gpu_memory_utilization`
+  budget so you don't OOM), and re-check utilization in the first few steps after relaunch.
 
 ## Long-running runs MUST survive restarts & network drops
 Training and eval runs take hours; they must outlive a dropped session, a network blip, or a

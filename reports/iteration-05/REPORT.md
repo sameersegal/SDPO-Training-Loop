@@ -1,15 +1,24 @@
 # Iteration 05 — Qwen3-8B SDPO with an LLM trace-aligned critic (logprob-gated, ≤20 steps)
 
-**Status: DONE (clean end-to-end run; expected null on held-out).** The deliverable — one clean
-end-to-end SDPO+critic run on an in-regime (~8B) model without collapse/OOM/hang — is met. Training:
+**Status: DONE (clean run; held-out null HID a real train-distribution regression).** The deliverable
+— one clean end-to-end SDPO+critic run on an in-regime (~8B) model without OOM/hang — is met. Training:
 Qwen3-8B, 20 steps, W&B run `8281dbd7` **finished**, all checkpoints saved (`ap-oeiw6nb4…`, $10.86).
-Eval (ckpt-20 vs base, held-out **easy+medium**, Python, pass@k n=8): **no measurable change** —
-overall pass@8 **0.600 → 0.600** (easy 0.80→0.80, medium 0.40→0.40); pass@1 0.425→0.388 is within
-base's own ±0.04 run-to-run noise. This is the **expected null for a 20-step / ~32%-of-data
-prototype** (epoch 0.3175), and beating base was explicitly **not** the bar. Full numbers, app ids,
-the 2h-timeout crash + `sdpo_passk` resilience fix, and spend ($39.74 total) → [PROVENANCE.md](./PROVENANCE.md).
-Open follow-up (not run): a **train==eval** probe (seen-train / unseen-train / held-out 3-point
-curve, easy+medium, judged private) — a more sensitive test of whether the optimization moved at all.
+
+**Headline finding — held-out eval is dangerously insensitive.** On the **held-out** easy+medium set
+(Python, pass@k n=8) ckpt-20 vs base looks like a **null**: overall pass@8 0.600→0.600. But a
+**train==eval probe** (eval on the problems the model actually optimized over) tells the opposite
+story: on the **trained distribution** ckpt-20 **regressed** — pass@8 **0.83 → 0.50 on seen-train AND
+unseen-train** (Δ−0.33), consistent **per-problem** (ckpt-20 ≤ base on 12/12, never better; marginal
+2/8 problems collapse to 0/8, robust 8/8 erode to 6–7/8). The gap **widens with k** → **diversity
+loss / mode collapse** (iteration-01's failure, now at 8B), in just 20 steps / ~32% of data
+(epoch 0.3175). Held-out missed it because base scores lower there (0.60) — less headroom to lose.
+3-point curve (seen-train / unseen-train / held-out): see
+[`figures/iter05_story_heldout_vs_traineval.png`](./figures/iter05_story_heldout_vs_traineval.png) and
+[`figures/train_eval_3point_curve.png`](./figures/train_eval_3point_curve.png). Caveat: train buckets
+are n=6 (accelerated subset), but the 12/12 per-problem consistency makes it signal, not noise.
+Full numbers, app ids, the 2h-timeout crash + `sdpo_passk` resilience fix, and spend ($45 total) →
+[PROVENANCE.md](./PROVENANCE.md). Beating base was explicitly **not** the bar — a clean,
+*interpretable* run was, and the train==eval probe is the interpretable signal.
 
 First run on an **in-regime (~8B) model**, after iterations 01–03 on
 Gemma-4-E2B (~2B) showed the small-scale failure the original SDPO paper predicts. This iteration

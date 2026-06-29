@@ -384,12 +384,13 @@ def evaluate(which: str):
     gpu="H100",
     volumes=VOLUMES,
     secrets=[modal.Secret.from_name("huggingface"), modal.Secret.from_name("wandb")],
-    timeout=2 * 60 * 60,  # safety; early-exit eval + light filter keep it well under
-)
+    timeout=5 * 60 * 60,  # headroom: thinking-ON 32k mediums are slow; the 2h default
+)                         # crashed the full-25 held-out eval on the hard tail.
 def passk_one(which: str, languages: str = "python",
               adapter: str = "/root/app/sdpo_out", ojb_splits: str = "ojb_splits.json",
               tag: str = "", model: str = "Qwen/Qwen3-8B",
-              max_model_len: int = 40960, max_tokens: int = 32768, limit: int = 0):
+              max_model_len: int = 40960, max_tokens: int = 32768, limit: int = 0,
+              ids: str = ""):
     """pass@k only (returns as soon as it finishes — no slow held-out/gsm8k tail).
 
     adapter: LoRA dir to serve when which=='sdpo' (e.g. .../sdpo_out/checkpoint-20).
@@ -412,7 +413,9 @@ def passk_one(which: str, languages: str = "python",
     base = model
     serve = ["vllm", "serve", base, "--port", "8000", "--dtype", "bfloat16",
              "--max-model-len", str(max_model_len), "--gpu-memory-utilization", "0.85",
-             "--max-num-seqs", "16", "--enforce-eager"]  # eager: dodge the kernel-4.19 gen hang
+             "--max-num-seqs", "48", "--enforce-eager"]  # eager: dodge the kernel-4.19 gen hang
+    # 48-way: held-out logs showed KV cache only 6-18% at 16 seqs on H200 — badly
+    # underutilized; 48 stays well under the 0.85 budget and ~3x's wall-clock throughput.
     if which == "sdpo":
         serve += ["--enable-lora", "--lora-modules", f"sdpo={adapter}",
                   "--max-lora-rank", "32"]
@@ -433,9 +436,11 @@ def passk_one(which: str, languages: str = "python",
         _cmd = ["python", "sdpo_passk.py", "--served-model", served,
                 "--tag", tag, "--n", "8", "--ks", "1,2,4,8",
                 "--max-tokens", str(max_tokens), "--temperature", "0.8",
-                "--languages", languages, "--concurrency", "16", "--wandb"]
+                "--languages", languages, "--concurrency", "48", "--wandb"]
         if limit:
             _cmd += ["--limit", str(limit)]
+        if ids:
+            _cmd += ["--ids", ids]
         subprocess.run(_cmd, check=True)
     finally:
         srv.terminate()
@@ -456,21 +461,27 @@ def passk_run(which: str = "sdpo", languages: str = "python", out: str = ""):
 @app.local_entrypoint()
 def eval_checkpoint(checkpoint: str = "checkpoint-20", languages: str = "python",
                     ojb_splits: str = "ojb_splits.json", model: str = "Qwen/Qwen3-8B",
-                    gpu: str = "H200", limit: int = 0):
+                    gpu: str = "H200", limit: int = 0, ids: str = "", tag_suffix: str = ""):
     """Held-out pass@k for base vs ONE checkpoint, in parallel — the cheap sanity check.
       modal run src/modal_sdpo.py::eval_checkpoint --checkpoint checkpoint-10 --languages python
     limit: cap to first N tasks (easy-first). --limit 10 (python) = the 10 easy+medium held-out
       problems, skipping the 15 hard (0/8 + the slow 32k tail that overran the 2h timeout).
+    ids: comma list of explicit problem ids (overrides the held-out split) — used for the
+      train==eval generalization curve (seen / unseen-train subsets), judged on PRIVATE cases.
+    tag_suffix: appended to the base/sdpo tags so train-eval outputs (e.g. base_train) don't
+      clobber the held-out files/W&B runs.
     """
     import json
     adapter = f"/root/app/sdpo_out/{checkpoint}"
-    print(f"[modal] eval base vs {checkpoint} ({adapter}) on {ojb_splits} held-out, "
-          f"langs={languages}, limit={limit or 'full'}")
+    base_tag = "base" + tag_suffix
+    sdpo_tag = checkpoint.replace("-", "") + tag_suffix
+    print(f"[modal] eval base vs {checkpoint} ({adapter}) on {ojb_splits}, "
+          f"langs={languages}, limit={limit or 'full'}, ids={'custom('+str(len(ids.split(',')))+')' if ids else 'split'}")
     p = passk_one.with_options(gpu=gpu)
-    base_call = p.spawn("base", languages, adapter, ojb_splits, "base", model=model, limit=limit)
-    sdpo_call = p.spawn("sdpo", languages, adapter, ojb_splits, checkpoint.replace("-", ""), model=model, limit=limit)
+    base_call = p.spawn("base", languages, adapter, ojb_splits, base_tag, model=model, limit=limit, ids=ids)
+    sdpo_call = p.spawn("sdpo", languages, adapter, ojb_splits, sdpo_tag, model=model, limit=limit, ids=ids)
     base_res, sdpo_res = base_call.get(), sdpo_call.get()
-    for name, res in [("base", base_res), (checkpoint, sdpo_res)]:
+    for name, res in [(base_tag, base_res), (sdpo_tag, sdpo_res)]:
         with open(f"sdpo_passk_{name.replace('-', '')}.json", "w") as f:
             json.dump(res, f, indent=2)
     # compact comparison

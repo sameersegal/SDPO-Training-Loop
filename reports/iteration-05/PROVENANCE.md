@@ -76,3 +76,43 @@
   and judging in try/except; a failed request/judge degrades to an `ERR` (non-AC) verdict instead of
   raising and sinking the whole run (the buffer-all anti-pattern that caused `ap-cXQiWXak...` to crash
   after all generation and Modal to retry the same bug).
+
+## train==eval 3-point generalization curve (the headline finding) — 2026-06-29
+
+- **What:** does ckpt-20 differ from base on the problems it *optimized over*? Eval base vs ckpt-20 on
+  **seen-train** + a difficulty-matched **unseen-train** sample, judged on **private** cases, paired
+  with the held-out easy+medium → seen / unseen / held-out gradient.
+- **Seen set (reconstructed exactly):** replayed the trainer's data order — `RepeatSampler(shuffle=True,
+  seed=42)` over `build_dataset("train", easy+medium, py+cpp, cp_method).shuffle(seed=0)` — and took the
+  first 40 consumed rows (= epoch 0.3175 × 126). Python subset = **19 seen** (5 easy + 14 medium).
+  Mapping + the accelerated 6+6 subset saved in `data/train_eval_split.json` (reproducible).
+- **Run (accelerated for a deadline):** `eval_checkpoint --ids <12: 6 seen + 6 unseen, 2 easy + 4
+  medium each> --tag-suffix _train`, Python, n=8, **private** judge, **48-way concurrency** (raised from
+  16 after KV-cache telemetry showed the H200 at 6–18% — idle). Modal app `ap-Wq3F8MHhELUW7xur89HIVF`,
+  ~$5. (The full 19+19 run `ap-mxjKMxEW…` was killed for speed; 38 medium-heavy problems ≈ 2.5–3h.)
+- **Result — held-out null HID a real regression on the trained distribution:**
+
+  | bucket | n | base pass@1 / @8 | ckpt-20 pass@1 / @8 |
+  |---|---|---|---|
+  | seen-train | 6 | 0.58 / **0.83** | 0.40 / **0.50** |
+  | unseen-train | 6 | 0.54 / **0.83** | 0.38 / **0.50** |
+  | held-out | 10 | 0.42 / 0.60 | 0.39 / 0.60 |
+
+  pass@8 **0.83 → 0.50 (Δ−0.33)** on BOTH seen and unseen train; **per-problem ckpt-20 ≤ base on 12/12**
+  (never better) — marginal 2/8 problems collapse to 0/8, robust 8/8 erode to 6–7/8. Gap widens with k
+  ⇒ **diversity loss / mode collapse** in 20 steps. Held-out missed it (base only 0.60 there). **Lesson:
+  held-out eval alone is dangerously insensitive; the train==eval probe is the sensitive test.**
+- **Artifacts (committed):** `data/sdpo_passk_traineval_{base,ckpt20}.json` (per-problem),
+  `data/train_eval_split.json` (seen/unseen ids), figures
+  `figures/train_eval_3point_curve.png` + `figures/iter05_story_heldout_vs_traineval.png`,
+  `figures/heldout_passk_base_vs_ckpt20.png`.
+- **Total iteration spend:** **~$45** (training $10.86 + held-out eval $28 + train==eval ~$5; ~$22 of
+  the held-out eval was lost to the 2h-timeout crash + retry-loop before the resilience fix).
+
+### Code added/changed (train==eval + acceleration)
+- `src/sdpo_passk.py` — `--split` + `--ids` (eval an explicit problem-id list, e.g. the seen/unseen
+  train subsets) on top of the resilience fix.
+- `src/modal_sdpo.py` — `passk_one`/`eval_checkpoint` gained `ids` + `tag_suffix` passthrough; **fn
+  timeout 2h → 5h** (thinking-ON mediums are slow); **vLLM `--max-num-seqs` + client `--concurrency`
+  16 → 48** (KV-cache telemetry showed the H200 idling — see the CLAUDE.md utilization note).
+- `src/plot_heldout_delta.py`, `src/plot_train_eval_curve.py`, `src/plot_iter05_story.py` — figures.

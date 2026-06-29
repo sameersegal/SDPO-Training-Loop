@@ -51,6 +51,11 @@ def main():
     ap.add_argument("--temperature", type=float, default=0.8)
     ap.add_argument("--top-p", type=float, default=0.95)
     ap.add_argument("--languages", default="python,cpp")
+    ap.add_argument("--split", default="heldout",
+                    help="which split to eval (e.g. heldout, train); overridden by --ids")
+    ap.add_argument("--ids", default="",
+                    help="comma list of problem ids to eval (overrides --split); e.g. the "
+                         "seen/unseen-train subsets for a train==eval generalization curve")
     ap.add_argument("--limit", type=int, default=0,
                     help="cap to first N tasks (easy-first) for a cheap smoke; 0 = all")
     ap.add_argument("--concurrency", type=int, default=16)
@@ -68,10 +73,14 @@ def main():
 
     client = OpenAI(base_url=args.base_url, api_key="EMPTY", timeout=2400)
     languages = args.languages.split(",")
+    if args.ids.strip():
+        pool = [int(x) for x in args.ids.split(",") if x.strip()]
+    else:
+        pool = SPLITS[args.split]
     tasks = []
     for lang in languages:
         pmap = CPP_PROMPT_BY_ID if lang == "cpp" else PROMPT_BY_ID
-        for pid in SPLITS["heldout"]:
+        for pid in pool:
             if pid in pmap:
                 tasks.append((lang, pid, pmap[pid]))
 

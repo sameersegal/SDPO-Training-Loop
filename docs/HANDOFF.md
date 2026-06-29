@@ -1,133 +1,112 @@
-# HANDOFF — SDPO post-training of Gemma-4-E2B-it on OJBench
+# HANDOFF — iteration-05: monitor the running Qwen3-8B SDPO+critic run
 
-> ⚠️ **EXECUTED — kept for history.** These next-steps were carried out. Current results are in
-> **[`FINDINGS.md`](./FINDINGS.md)**, the reconciled design is in **[`EXPERIMENT.md`](./EXPERIMENT.md)**,
-> and cloud scale-up is in **[`MODAL.md`](./MODAL.md)**. Two things below changed in execution:
-> training is **easy-only** (easy+medium gave 0 successful rollouts), and the adapter is served via
-> **vLLM `--enable-lora`** (merging drops weights on this multimodal model). Read for context, not as current TODO.
-
-Read **`EXPERIMENT.md`** first (full design + locked decisions). This file is the operational
-state + exact next steps so another agent can continue without re-deriving anything.
+> **Live operational handoff.** A training run is **RUNNING on Modal (cloud H200)** right now.
+> This file is everything needed to (a) re-attach monitoring from any machine, (b) recover if it
+> crashed, and (c) run the eval once it finishes. Design rationale lives in
+> [`EXPERIMENT.md`](./EXPERIMENT.md) and [`../reports/iteration-05/REPORT.md`](../reports/iteration-05/REPORT.md);
+> cloud mechanics in [`MODAL.md`](./MODAL.md). Older Gemma handoff is in git history.
 
 ---
 
 ## 0. One-paragraph status
+Iteration-05 trains **Qwen/Qwen3-8B** with **SDPO + an LLM trace-aligned critic** (Claude
+`claude-sonnet-4-6`) on the OJBench easy+medium train band. The run is **detached on Modal** and
+survives any local/SSH disconnect (it runs server-side; the launcher is `setsid`-decoupled AND
+`--detach`). It checkpoints to the `sdpo-outputs` volume every 5 steps, has a no-progress watchdog,
+and **does not auto-relaunch** — per the standing instruction, a crash leaves it stopped for review.
 
-The full SDPO loop is **built and validated end-to-end** (the TRL `SDPOTrainer` smoke test ran
-on this box: vLLM-colocate generation + LoRA on gemma4 + SDPO loss + adapter saved). Data,
-splits, judge (python+C++), and baseline are done. **The actual training run + post-eval +
-full-GSM8K probe have NOT been run** — that's the next step. Baseline is logged to W&B.
+## 1. The running job
+- **Modal app id:** `ap-oeiw6nb406wU2KP1YlKYFM`  (also in `runs/iteration-05/RUNNING_APP_ID.txt`)
+- **W&B:** project `sdpo-gemma-ojbench`, run name **`sdpo-qwen3-8b-critic-d0.1-grpobin-sdpo0.5-base-s20`**
+- **Exact config (from the launch):**
+  ```
+  Qwen/Qwen3-8B · H200 · easy,medium · python,cpp · G=8 · max_completion 20480 · max_steps 20
+  save_steps 5 · vllm_gpu_util 0.20 · lr 1e-4 · distillation_weight 0.1 · teacher_kind base
+  --critic (sonnet) · --grpo-reward binary · --sdpo-threshold 0.5 · system cp_method
+  ```
+- **Launched with:** `setsid nohup .venv/bin/modal run --detach src/modal_sdpo.py::main --critic > runs/iteration-05/launch.log 2>&1 < /dev/null &`
 
-## 1. What is DONE
-
-- ✅ Models downloaded (`google/gemma-4-E2B-it`; also `WeiboAI/VibeThinker-3B` for an earlier
-  comparison — not part of SDPO).
-- ✅ Env: `.venv` with vLLM 0.23.0, trl 1.6.0 (`trl.experimental.sdpo`), peft 0.19, wandb, datasets.
-- ✅ OJBench judge (lightweight): python (`python3 sol.py`) + C++ (`g++ -O2 -std=c++17`), normalized
-  diff, public/private per-problem split. In `sdpo_ojbench.py` / `ojbench_eval.py`.
-- ✅ Splits (`ojb_splits.json`): **train** = 63 easy+medium (15 easy, 48 medium); **held-out** =
-  25 = 15 hard + 5 easy + 5 medium (frontier "thermometer" slice). All have py+cpp prompts + test data.
-- ✅ SDPO trainer (`sdpo_train.py`): LoRA **r=32 / α=64** on text tower only, vLLM colocate,
-  `use_successful_as_teacher`, EMA teacher, topk_logits K=100, num_generations=8, wandb.
-- ✅ Held-out evaluator (`sdpo_eval_vllm.py`): pass@1 by language×difficulty, **32k** cap, wandb.
-- ✅ **Baseline measured** (W&B run `eval-base`, project `sdpo-gemma-ojbench`):
-  | pass@1 | easy(5) | medium(5) | hard(15) | overall(25) |
-  |---|---|---|---|---|
-  | python | 1/5 | 0/5 | 0/15 | 1/25 |
-  | cpp | 3/5 | 1/5 | 0/15 | 4/25 |
-- ✅ Smoke test of training pipeline passed (2 steps, tiny config).
-
-## 2. What is NEXT (run order)
-
-> The GPU is single; serving and colocate-training both need it — **only one at a time**.
-> Stop any vLLM server before training (see §4 gotchas for the safe way to stop).
-
-**A. Full-GSM8K BASELINE** (regression reference; do while base is served):
+### Re-attach monitoring (stateless — run from anywhere with the repo + `.venv` + Modal creds)
 ```bash
-source .venv/bin/activate
-# serve base if not already: python -m vllm.entrypoints.openai.api_server \
-#   --model google/gemma-4-E2B-it --port 8000 --dtype bfloat16 --max-model-len 36864 --gpu-memory-utilization 0.85
-python eval_runner.py --dataset gsm8k --sample-frac 1.0 --model google/gemma-4-E2B-it \
-  --out results_gsm8k_base_full.json          # full 1319-problem GSM8K
+cd <repo>
+.venv/bin/modal app list | grep oeiw6nb4                 # state: ephemeral=running, stopped=done/crashed
+.venv/bin/modal app logs ap-oeiw6nb406wU2KP1YlKYFM       # live logs (Ctrl-C to detach; does NOT stop the run)
+.venv/bin/modal volume ls sdpo-outputs/sdpo_out          # checkpoints appear at step 5/10/15/20
+.venv/bin/python src/modal_cost.py --app ap-oeiw6nb406wU2KP1YlKYFM   # spend so far
+```
+Optional durable local mirror + filtered tail:
+```bash
+setsid nohup .venv/bin/modal app logs ap-oeiw6nb406wU2KP1YlKYFM > runs/iteration-05/train.log 2>&1 < /dev/null &
+tail -f runs/iteration-05/train.log | grep -E "'loss':|success_group_fraction|saved adapter|OutOfMemory|Traceback|did not find"
 ```
 
-**B. SDPO TRAINING** (stop the server first to free the GPU):
+### Step-0 health canaries (first per-step `{'loss': ...}` dict, ~5-10 min after launch)
+- **No `OutOfMemory`** — 32k OOM'd; this run is 20k/0.20 to fit. If it OOMs again, see §2.
+- `self_distillation/reward_mean` — now the **binary AC rate** on easy+medium (the GRPO signal).
+- `self_distillation/success_group_fraction` — fraction of groups with a teacher at **fraction ≥ 0.5**
+  (binary-GRPO/fractional-SDPO split; near-misses count, so this should beat AC-only).
+- `completions/clipped_ratio` **< 1** — rollouts finishing under 20k (not all NO_CODE).
+- `self_distillation/feedback_used_fraction` > 0 — the critic is conditioning all-fail/near-miss groups.
+
+## 2. If it crashed / needs relaunch
+1. Find the failure: `.venv/bin/modal app logs ap-oeiw6nb406wU2KP1YlKYFM | grep -iE "error|oom|traceback" | tail`.
+2. **OOM** → lower further: `... main --critic --max-completion-length 16384 --vllm-gpu-util 0.18`
+   (16k is the thinking-ON NO_CODE floor; easy problems — the signal source — still fit).
+3. **Resume caveat (IMPORTANT):** the `sdpo_out` dir on the volume contains **stale checkpoints from a
+   prior run** (`checkpoint-3,4,6,7`, possibly a different model). Do **NOT** pass `--resume` blindly —
+   it picks the latest `checkpoint-*` and would resume Qwen3 from a stale/foreign checkpoint. Before any
+   resume, verify the latest checkpoint is THIS run's (Qwen3, step ≥5) or wipe `sdpo_out` and start fresh.
+4. Relaunch is the same decoupled command as §1 (omit `--resume`).
+
+## 3. After training finishes → eval (pass@k only, per plan)
+Eval **base vs each checkpoint** on the held-out split. `eval_checkpoint` serves Qwen3-8B at 40960
+ctx / 32768 max-tokens on H200 (thinking-ON needs the room) and runs `sdpo_passk` (k=1,2,4,8):
 ```bash
-python sdpo_train.py --difficulties easy,medium --languages python,cpp \
-  --num-generations 8 --max-completion-length 8192 --max-steps 20 --output-dir sdpo_out
-# logs to W&B project sdpo-gemma-ojbench automatically (WANDB_API_KEY in .env)
+# one checkpoint at a time (base re-served each call; fine, parallel base+sdpo containers):
+.venv/bin/modal run src/modal_sdpo.py::eval_checkpoint --checkpoint checkpoint-20 --languages python
+.venv/bin/modal run src/modal_sdpo.py::eval_checkpoint --checkpoint checkpoint-15 --languages python
+.venv/bin/modal run src/modal_sdpo.py::eval_checkpoint --checkpoint checkpoint-10 --languages python
+.venv/bin/modal run src/modal_sdpo.py::eval_checkpoint --checkpoint checkpoint-5  --languages python
 ```
-Watch on W&B (CRITICAL — proves it's learning, not idling):
-- `self_distillation/success_group_fraction` must be **> 0** (groups with ≥1 passing rollout).
-- `self_distillation/reward_mean`, `self_distillation/distillation_loss` should be nonzero.
-- If you see "SDPO self-distillation is inactive / no successful rollouts" repeatedly → the
-  model isn't solving any training problem in 8 tries; bias the data more toward `easy`, raise
-  `num_generations`, or raise `max_completion_length`.
+Results land as `sdpo_passk_*.json` on the `sdpo-outputs` volume + W&B. The metric is **pass@k**, not
+greedy pass@1 (greedy wobbles ±2/25; the SDPO loss is NOT a quality signal).
 
-**C. MERGE adapter + POST-EVAL** (gemma4 + LoRA may not serve directly in vLLM, so merge):
+## 4. Preserve the adapter (so the next run can't overwrite it)
 ```bash
-python - <<'PY'
-import torch; from transformers import AutoModelForCausalLM, AutoTokenizer; from peft import PeftModel
-b="google/gemma-4-E2B-it"
-m=AutoModelForCausalLM.from_pretrained(b, dtype=torch.bfloat16)
-m=PeftModel.from_pretrained(m,"sdpo_out").merge_and_unload()
-m.save_pretrained("sdpo_merged"); AutoTokenizer.from_pretrained(b).save_pretrained("sdpo_merged")
-PY
-# serve sdpo_merged, then:
-python sdpo_eval_vllm.py --served-model sdpo_merged --tag sdpo --max-tokens 32768 --wandb
-python eval_runner.py --dataset gsm8k --sample-frac 1.0 --model sdpo_merged --out results_gsm8k_sdpo_full.json
+.venv/bin/modal volume get sdpo-outputs /sdpo_out/checkpoint-20 ./runs/iteration-05/
+# and copy the chosen adapter into a per-iteration path on the volume, e.g. sdpo-outputs:/iteration-05/
 ```
 
-**D. REPORT delta:** post (`sdpo_eval_sdpo.json`) − base (`sdpo_eval_base.json`) per language×diff;
-GSM8K post vs base (no-regression check).
+## 5. Iteration-05 decisions locked (don't relitigate without reason)
+- **Reward is split by consumer** (`src/sdpo_feedback.py`): GRPO policy **advantage = binary AC (1/0)**
+  (`--grpo-reward binary`); SDPO **teacher gating = dense fraction** with `success_reward_threshold`
+  (`--sdpo-threshold 0.5`) so near-miss rollouts (≥50% of public cases) can be teacher demonstrations.
+  The reward func always judges dense (real fraction on the `FeedbackBus`) and derives binary from the
+  verdict; `_LiveFeedbackBuilder` substitutes the fraction tensor into the gate. Teacher-demo selection
+  is first-eligible in group order (a possible refinement: prefer the highest-fraction near-miss).
+- **Hybrid loss** = `(1−0.1)·GRPO + 0.1·SDPO` via `distillation_weight` (verifier-dominant; no new code).
+- **Teacher = base** (fixed/initial T0); **critic = sonnet, thinking per default**; **lr 1e-4**.
+- **Memory fit:** 32k completion OOM'd the H200 at the loss step (logits `seq×vocab` + vLLM 0.30 >
+  140 GiB). Defaults are now **20480 / vllm 0.20** (baked into `main()`); fragmentation flag
+  `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` already set in the image.
+- **GPU:** train AND eval run on **H200** (the `gpu="H100"` strings on `train`/`passk_one` are vestigial
+  defaults always overridden via `.with_options(gpu="H200")`).
+- **Eval scope:** pass@k only (no GSM8K this run). **Band:** entire train split (easy+medium) minus held-out.
 
-## 3. Decisions locked (don't relitigate without reason)
-- Held-out = **hybrid** (hard + easy/med thermometer).
-- First-run feedback = **successful-rollouts-only** (TRL default). **Iteration 2 = patch live
-  judge-text feedback** into the teacher reprompt (TRL reads feedback only from a static
-  `privileged_context` column at `sdpo_trainer.py:835`; per-rollout judge text needs a trainer
-  patch — this is where SDPO's edge on all-failed/hard groups comes from).
-- Eval cap **32k**, training completion **8k** (32k in training is compute/memory-prohibitive).
-- LoRA **r=32/α=64**, text tower only.
+## 6. Gotchas that have bitten us (apply by default)
+- **Generate with vLLM, never transformers `model.generate()`** (~10 tok/s on the box; a thinking-ON
+  rollout is ~14 min). Don't cap thinking-ON generation tight — Qwen3 NO_CODEs below ~16k.
+- **Stream results to disk per item** (concurrent + per-completion write + `--resume`), never buffer-all.
+- **Killing a vLLM parent orphans `EngineCore`** (pins ~`gpu_util`×VRAM) → next run OOMs at init. After
+  any kill, `nvidia-smi --query-compute-apps=pid,used_memory --format=csv` and `kill -9` leftovers.
+- **`pkill -f <script>.py` can kill your own shell** — use a `[.]` bracket regex; never put the relaunch
+  in the same line as the `pkill`.
+- **Serve the adapter via `vllm --enable-lora`, not a merged checkpoint** (merge drops weights here).
+- **Modal:** code+data ship to flat `/root/app`; in-process imports need `/root/app` on `sys.path`.
 
-## 4. Gotchas / environment specifics (will bite you)
-- **Never** `pkill -f "vllm serve"` (or any pattern matching your own command line) — it kills the
-  killer. Stop servers via the harness task API, or `pkill` by PID / a non-self-matching pattern.
-- **gemma4 + LoRA:** target ONLY `language_model.*(q|k|v|o|gate|up|down)_proj` (regex in
-  `sdpo_train.py`). The vision/audio towers use `Gemma4ClippableLinear`, which PEFT cannot wrap.
-- **vLLM 0.23.0** prints a TRL "supported 0.12–0.19" warning — harmless, the loop runs.
-- **No sudo / no pypy3** on this box → the official **DMOJ** judge is not usable; we use the
-  lightweight judge. For training, judge fidelity = reward fidelity (false-positive AC = bad signal).
-- **vLLM greedy is nondeterministic** across runs (batching) → small-n pass@1 wobbles ±1–2.
-- Box = GB10 (aarch64, 128 GB unified). `nvidia-smi` reports memory as `[N/A]` here.
-- `.env` holds `WANDB_API_KEY` (gitignored; scripts auto-load it). W&B project `sdpo-gemma-ojbench`.
-
-## 5. File inventory (committed)
-| File | Role |
-|---|---|
-| `EXPERIMENT.md` | design / source of truth |
-| `HANDOFF.md` | this file |
-| `ojb_splits.json` | train/held-out split + py & cpp prompts |
-| `sdpo_ojbench.py` | env adapter: prompts, public/private split, reward func, py+cpp judging |
-| `ojbench_eval.py` | judging primitives + earlier Gemma-vs-VibeThinker comparison harness |
-| `sdpo_train.py` | SDPO training (TRL SDPOTrainer + LoRA + vLLM colocate) |
-| `sdpo_eval_vllm.py` | held-out pass@1 by language×difficulty via vLLM (+wandb) |
-| `sdpo_eval.py` | transformers-based held-out eval (fallback; slower) |
-| `eval_runner.py` | GSM8K / math eval harness |
-| `serve.sh`, `serve_vibe.sh` | vLLM serve helpers |
-
-Gitignored (regenerate/re-download): `.venv/`, `ojbench_data/` (test cases, ~2 GB), `sdpo_out/`,
-result `*.json/jsonl`, logs, `.env`, `ojbench_prompts/`, `OJBench_repo/`, `sdpo_paper/`.
-
-## 6. Open risks / fast-follows
-1. **Live judge feedback** (iteration 2) — the biggest faithfulness gap to the SDPO paper.
-2. **Reward fidelity** — consider stricter judging / DMOJ before trusting training rewards.
-3. **Thermometer noise** — bump frontier slice size or use pass@k for a stable signal.
-4. **Hard likely stays ~0** for a 2.3B model in a short run; that's expected.
-5. **Compute** — on-policy SDPO (G=8, 8k completions) is minutes/step on one GPU; a real delta
-   needs hours/hundreds of steps, not the 20-step prototype.
-
-## 7. Process state at handoff
-- A base vLLM server (`--max-model-len 36864`) may still be running on :8000 from the baseline.
-  Stop it before training. No training job is running. No uncommitted code (all pushed to
-  `origin/main`).
+## 7. Process / repo state at handoff
+- Training **running** on Modal (`ap-oeiw6nb406wU2KP1YlKYFM`); nothing local holds it.
+- Code changes for the reward split + OOM fix + run name committed (`src/sdpo_feedback.py`,
+  `src/sdpo_train.py`, `src/modal_sdpo.py`). No local GPU job on the box.
+- `ANTHROPIC_API_KEY` is in repo-root `.env` (gitignored) and mirrored to the Modal secret `anthropic`
+  (validated in-container via `modal run src/modal_sdpo.py::critic_check`).

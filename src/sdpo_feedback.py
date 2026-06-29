@@ -22,13 +22,21 @@ from sdpo_ojbench import judge_completion
 
 
 class FeedbackBus:
-    """Carries per-rollout feedback from the reward function to the teacher builder."""
+    """Carries per-rollout data from the reward function to the teacher builder.
+
+    feedbacks: per-rollout judge text / critique (teacher conditioning).
+    fractions: per-rollout dense passed/total. The SDPO teacher gating reads THIS
+      (near-miss rollouts can teach), while the GRPO advantage uses the binary AC
+      reward the func returns — see make_feedback_reward_func / _LiveFeedbackBuilder.
+    """
     def __init__(self):
         self.feedbacks = []
+        self.fractions = []
 
 
 def make_feedback_reward_func(bus, which="public", timeout=6.0, reward_mode="fraction",
-                              critic=False, critic_model=None, critic_thinking=False):
+                              critic=False, critic_model=None, critic_thinking=False,
+                              grpo_reward="fraction"):
     """Like make_reward_func, but also stashes per-rollout judge feedback on the bus.
 
     Dense (fraction) judging runs EVERY public case with no early-exit, so judging is
@@ -36,6 +44,16 @@ def make_feedback_reward_func(bus, which="public", timeout=6.0, reward_mode="fra
     judge_completion is subprocess-based (releases the GIL), so we judge the group's
     completions CONCURRENTLY in a thread pool. ex.map preserves order, so rewards[k] /
     feedbacks[k] still line up with completion_ids[k] for the teacher builder.
+
+    iteration-05 splits the reward by consumer (`grpo_reward`):
+      - the GRPO policy advantage gets a BINARY reward (AC=1.0 else 0.0) when
+        grpo_reward="binary" — a clean "did it actually solve it" signal, no partial
+        credit polluting the policy gradient;
+      - the SDPO teacher gating always gets the dense FRACTION (stashed on the bus),
+        so near-miss rollouts (fraction >= success_reward_threshold, e.g. 0.5) can
+        serve as teacher demonstrations even when not AC.
+    We ALWAYS judge dense here (so the fraction is real) and derive binary from the
+    verdict; `grpo_reward` only selects what the func RETURNS for the advantage.
 
     With `critic=True` (iteration 05), each FAILED rollout's deterministic feedback is
     replaced by an LLM trace-aligned critique (sdpo_critic) before it goes on the bus,
@@ -65,9 +83,14 @@ def make_feedback_reward_func(bus, which="public", timeout=6.0, reward_mode="fra
             lang = language[k] if language is not None else "python"
             text = comp[-1]["content"] if isinstance(comp, list) else comp
             pid = int(id[k])
-            r, v, fb = judge_completion(text, pid, which=which, timeout=timeout,
-                                        language=lang, reward_mode=reward_mode,
-                                        max_case_bytes=mb, max_cases=mc)
+            # Always judge DENSE so `frac` is the true passed/total (binary mode would
+            # early-exit on first failure and lose it); derive the binary AC reward from
+            # the verdict. The bus carries `frac` for SDPO gating; the func returns the
+            # GRPO reward (binary or fraction) per `grpo_reward`.
+            frac, v, fb = judge_completion(text, pid, which=which, timeout=timeout,
+                                           language=lang, reward_mode="fraction",
+                                           max_case_bytes=mb, max_cases=mc)
+            binary = 1.0 if v == "AC" else 0.0
             if critic and v not in ("AC", "NO_CODE"):
                 from sdpo_critic import critique  # local import: optional dependency
                 pmap = CPP_PROMPT_BY_ID if lang == "cpp" else PROMPT_BY_ID
@@ -75,14 +98,18 @@ def make_feedback_reward_func(bus, which="public", timeout=6.0, reward_mode="fra
                 fb = critique(pmap.get(pid, ""), code, v, fb, lang,
                               model=critic_model, thinking=critic_thinking,
                               client=critic_client)
-            return float(r), fb
+            return float(frac), binary, fb
 
         n = len(completions)
         with ThreadPoolExecutor(max_workers=min(workers, max(1, n))) as ex:
             results = list(ex.map(judge_k, range(n)))  # ex.map preserves input order
-        bus.feedbacks = [fb for _, fb in results]
-        return [r for r, _ in results]
-    reward_func.__name__ = f"ojbench_{which}_reward_fb" + ("_critic" if critic else "")
+        bus.fractions = [frac for frac, _, _ in results]   # SDPO teacher gating
+        bus.feedbacks = [fb for _, _, fb in results]       # teacher conditioning
+        # GRPO advantage reward: binary AC by default for iteration-05, fraction otherwise.
+        return [(b if grpo_reward == "binary" else f) for f, b, _ in results]
+    reward_func.__name__ = (f"ojbench_{which}_reward_fb"
+                            + ("_critic" if critic else "")
+                            + ("_bin" if grpo_reward == "binary" else ""))
     return reward_func
 
 
@@ -92,11 +119,19 @@ class _LiveFeedbackBuilder(SuccessfulRolloutTeacherContextBuilder):
         self.bus = bus
 
     def build(self, output, prompts, rewards, feedbacks=None):
+        import torch
         fb = self.bus.feedbacks
+        fr = self.bus.fractions
         n = output["completion_ids"].shape[0]
-        # local feedbacks must align 1:1 with this process's completions; else fall back
+        # local feedbacks/fractions must align 1:1 with this process's completions; else fall back
         use = fb if len(fb) == n else feedbacks
-        return super().build(output, prompts, rewards, feedbacks=use)
+        # SDPO teacher gating (success_reward_threshold) runs on the dense FRACTION, so
+        # near-miss rollouts can be teachers. The GRPO advantage already consumed the binary
+        # reward upstream (rewards arg); we substitute fractions here purely for selection.
+        gate = rewards
+        if len(fr) == n:
+            gate = torch.tensor(fr, dtype=rewards.dtype, device=rewards.device)
+        return super().build(output, prompts, gate, feedbacks=use)
 
 
 class FeedbackSDPOTrainer(SDPOTrainer):

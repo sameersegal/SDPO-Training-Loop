@@ -58,3 +58,7 @@ knowledge/papers.html
 
 # personal Claude Code settings (machine-local)
 .claude/settings.local.json
+
+# stray raw outputs written to repo root (curated copies live under reports/)
+/qwen3_*.json
+/teacher_eval*.json

@@ -56,6 +56,7 @@ image = (
         "datasets==5.0.0",
         "flashinfer-python==0.6.12",
         "wandb==0.28.0",
+        "anthropic==0.112.0",  # iteration-05: the LLM critic (sdpo_critic) calls Claude per failed rollout
     )
     .env(
         {
@@ -101,6 +102,7 @@ VOLUMES = {
     secrets=[
         modal.Secret.from_name("huggingface"),  # -> HF_TOKEN (gated gemma-4)
         modal.Secret.from_name("wandb"),  # -> WANDB_API_KEY
+        modal.Secret.from_name("anthropic"),  # -> ANTHROPIC_API_KEY (the LLM critic)
     ],
     timeout=10 * 60 * 60,  # dense reward + feedback on the full 206-pool is slower per step
 )
@@ -243,34 +245,39 @@ def train(args: list[str], num_gpus: int = 1, ojb_splits: str = "ojb_splits_full
 @app.local_entrypoint()
 def main(
     smoke: bool = False,
-    # Single H100 is the right unit for this small (30-row) job: 4xH100 both
-    # OOMs (each DDP rank loads a full policy+teacher+vLLM) AND starves the GPUs
-    # (dataset split 4 ways). Speed comes from a faster single-GPU step, not more
-    # GPUs. Multi-GPU (e.g. "H100:4") still works via accelerate if the dataset grows.
-    gpu: str = "H100",
-    difficulties: str = "easy",
+    model: str = "Qwen/Qwen3-8B",     # iteration-05: in-regime ~8B model
+    gpu: str = "H200",                # 8B + 32k thinking-ON + colocate vLLM is H200 territory
+    difficulties: str = "easy,medium",  # train split is easy+medium (no hard); "" = all
     languages: str = "python,cpp",
     num_generations: int = 8,
-    max_completion_length: int = 8192,
+    max_completion_length: int = 20480,  # 32k OOM'd the H200 at the loss step; 20k fits & is > ~16k NO_CODE floor
     max_steps: int = 20,
-    vllm_gpu_util: float = 0.25,  # 0.45 OOM'd the 80 GB H100; 0.25 is validated
+    vllm_gpu_util: float = 0.20,       # 0.30 + 32k logits overflowed 140GiB; 0.20 frees ~14GiB headroom
     per_device_batch: int = 1,
-    grad_checkpointing: bool = True,  # off => faster backward on the roomy H100
-    feedback: bool = False,           # iteration 02: live per-rollout judge feedback
-    lr: float = 1e-4,                 # iteration 02 recipe: try 3e-5
-    reward_mode: str = "fraction",    # "binary" = fast early-exit (medium's huge cases)
-    system: str = "cp_method",        # iteration 03 default system prompt (train==eval)
-    save_steps: int = 20,             # checkpoint cadence -> sdpo-outputs volume
-    ojb_splits: str = "ojb_splits_full.json",  # iteration 03: the full 206-pool
-    resume: bool = False,             # resume from latest checkpoint in sdpo_out if present
+    grad_checkpointing: bool = True,
+    feedback: bool = False,           # live per-rollout judge feedback into the teacher
+    critic: bool = False,             # iteration-05: replace judge feedback w/ LLM critique (implies feedback)
+    critic_model: str = "",           # "" -> sdpo_critic.DEFAULT_CRITIC_MODEL (sonnet)
+    distillation_weight: float = 0.1,  # hybrid: loss=(1-w)*GRPO + w*SDPO (verifier-dominant)
+    teacher_kind: str = "base",       # fixed/initial teacher (iteration-05 T0)
+    lr: float = 1e-4,
+    reward_mode: str = "fraction",
+    grpo_reward: str = "binary",       # iteration-05: GRPO advantage = binary AC; SDPO gating = fraction
+    sdpo_threshold: float = 0.5,       # near-miss rollouts (>=50% cases) can be SDPO teachers
+    system: str = "cp_method",
+    save_steps: int = 5,              # eval at 5/10/15/20
+    ojb_splits: str = "ojb_splits.json",  # iteration-05 88-pool (train=easy+medium, heldout has hard)
+    resume: bool = False,
 ):
     num_gpus = int(gpu.split(":")[1]) if ":" in gpu else 1
+    common = ["--model", model, "--system", system, "--reward-mode", reward_mode,
+              "--grpo-reward", grpo_reward, "--sdpo-threshold", str(sdpo_threshold),
+              "--distillation-weight", str(distillation_weight), "--teacher-kind", teacher_kind]
     if smoke:
-        # Smoke validates the REAL iteration-03 path (full split + dense + feedback +
-        # cp_method + checkpointing), just tiny. --smoke shrinks data/steps internally;
-        # --save-steps 1 forces a checkpoint write so the volume-commit path is exercised.
+        # Smoke validates the REAL path (Qwen3 LoRA attach + critic fires + dense reward +
+        # checkpoint write), just tiny. --save-steps 1 exercises the volume-commit path.
         args = ["--smoke", "--difficulties", difficulties, "--languages", languages,
-                "--reward-mode", reward_mode, "--system", system, "--save-steps", "1"]
+                "--save-steps", "1", *common]
     else:
         args = [
             "--difficulties", difficulties,
@@ -281,19 +288,23 @@ def main(
             "--vllm-gpu-util", str(vllm_gpu_util),
             "--per-device-batch", str(per_device_batch),
             "--lr", str(lr),
-            "--reward-mode", reward_mode,
-            "--system", system,
             "--save-steps", str(save_steps),
             "--output-dir", "sdpo_out",
+            *common,
         ]
         if not grad_checkpointing:
             args.append("--no-grad-checkpointing")
         if resume:
             args.append("--resume")
-    if feedback:
+    if critic:
+        args.append("--critic")
+        if critic_model:
+            args += ["--critic-model", critic_model]
+    elif feedback:
         args.append("--feedback")
-    print(f"[modal] gpu={gpu} num_gpus={num_gpus} feedback={feedback} system={system} "
-          f"reward={reward_mode} save_steps={save_steps} splits={ojb_splits}  args={args}")
+    print(f"[modal] gpu={gpu} model={model} critic={critic} distill_w={distillation_weight} "
+          f"teacher={teacher_kind} system={system} save_steps={save_steps} splits={ojb_splits}\n"
+          f"        args={args}")
     train.with_options(gpu=gpu).remote(args, num_gpus=num_gpus, ojb_splits=ojb_splits)
 
 
@@ -375,13 +386,15 @@ def evaluate(which: str):
     secrets=[modal.Secret.from_name("huggingface"), modal.Secret.from_name("wandb")],
     timeout=2 * 60 * 60,  # safety; early-exit eval + light filter keep it well under
 )
-def passk_one(which: str, languages: str = "python,cpp",
-              adapter: str = "/root/app/sdpo_out", ojb_splits: str = "ojb_splits_full.json",
-              tag: str = ""):
+def passk_one(which: str, languages: str = "python",
+              adapter: str = "/root/app/sdpo_out", ojb_splits: str = "ojb_splits.json",
+              tag: str = "", model: str = "Qwen/Qwen3-8B",
+              max_model_len: int = 40960, max_tokens: int = 32768):
     """pass@k only (returns as soon as it finishes — no slow held-out/gsm8k tail).
 
     adapter: LoRA dir to serve when which=='sdpo' (e.g. .../sdpo_out/checkpoint-20).
-    ojb_splits: which split's held-out to eval on (iteration-03 -> full 206-pool's 53).
+    ojb_splits: which split's held-out to eval on (iteration-05 -> ojb_splits.json's 25).
+    Qwen3-8B is thinking-ON: max_tokens MUST be ~32k or it NO_CODEs (CLAUDE.md gotcha).
     """
     import json
     import os
@@ -393,19 +406,19 @@ def passk_one(which: str, languages: str = "python,cpp",
     os.environ.setdefault("WANDB_PROJECT", APP_NAME)
     os.environ["OJB_SPLITS"] = ojb_splits  # held-out comes from this split
     outputs.reload()  # see checkpoints committed by the (possibly stopped) train run
-    base = "google/gemma-4-E2B-it"
+    base = model
     serve = ["vllm", "serve", base, "--port", "8000", "--dtype", "bfloat16",
-             "--max-model-len", "16384", "--gpu-memory-utilization", "0.85",
-             "--max-num-seqs", "32", "--enforce-eager"]  # eager: dodge the kernel-4.19 gen hang
+             "--max-model-len", str(max_model_len), "--gpu-memory-utilization", "0.85",
+             "--max-num-seqs", "16", "--enforce-eager"]  # eager: dodge the kernel-4.19 gen hang
     if which == "sdpo":
         serve += ["--enable-lora", "--lora-modules", f"sdpo={adapter}",
                   "--max-lora-rank", "32"]
         served, tag = "sdpo", (tag or "sdpo")
     else:
-        served, tag = base, (tag or "base_modal")
+        served, tag = base, (tag or "base")
 
     srv = subprocess.Popen(serve)
-    for _ in range(180):
+    for _ in range(240):  # 32k-ctx Qwen3 load + warmup takes longer than gemma
         try:
             urllib.request.urlopen("http://localhost:8000/v1/models", timeout=2)
             break
@@ -416,7 +429,7 @@ def passk_one(which: str, languages: str = "python,cpp",
     try:
         subprocess.run(["python", "sdpo_passk.py", "--served-model", served,
                         "--tag", tag, "--n", "8", "--ks", "1,2,4,8",
-                        "--max-tokens", "8192", "--temperature", "0.8",
+                        "--max-tokens", str(max_tokens), "--temperature", "0.8",
                         "--languages", languages, "--concurrency", "16",
                         "--wandb"], check=True)
     finally:
@@ -437,15 +450,17 @@ def passk_run(which: str = "sdpo", languages: str = "python", out: str = ""):
 
 @app.local_entrypoint()
 def eval_checkpoint(checkpoint: str = "checkpoint-20", languages: str = "python",
-                    ojb_splits: str = "ojb_splits_full.json"):
+                    ojb_splits: str = "ojb_splits.json", model: str = "Qwen/Qwen3-8B",
+                    gpu: str = "H200"):
     """Held-out pass@k for base vs ONE checkpoint, in parallel — the cheap sanity check.
-      modal run src/modal_sdpo.py::eval_checkpoint --checkpoint checkpoint-20 --languages python
+      modal run src/modal_sdpo.py::eval_checkpoint --checkpoint checkpoint-10 --languages python
     """
     import json
     adapter = f"/root/app/sdpo_out/{checkpoint}"
     print(f"[modal] eval base vs {checkpoint} ({adapter}) on {ojb_splits} held-out, langs={languages}")
-    base_call = passk_one.spawn("base", languages, adapter, ojb_splits, "base")
-    sdpo_call = passk_one.spawn("sdpo", languages, adapter, ojb_splits, checkpoint.replace("-", ""))
+    p = passk_one.with_options(gpu=gpu)
+    base_call = p.spawn("base", languages, adapter, ojb_splits, "base", model=model)
+    sdpo_call = p.spawn("sdpo", languages, adapter, ojb_splits, checkpoint.replace("-", ""), model=model)
     base_res, sdpo_res = base_call.get(), sdpo_call.get()
     for name, res in [("base", base_res), (checkpoint, sdpo_res)]:
         with open(f"sdpo_passk_{name.replace('-', '')}.json", "w") as f:
@@ -843,6 +858,35 @@ def teacher_eval(smoke: bool = False, gpu: str = "H200", model: str = "Qwen/Qwen
     with open(local, "w") as f:
         json.dump(res, f, indent=2)
     print(f"[modal] saved -> {local} (volume sdpo-outputs:/{out.split('/',1)[-1]})")
+
+
+# ---------------------------------------------------------------------------
+# Critic sanity check (CPU, no GPU): confirm the LLM critic actually calls Claude
+# in-container — the silent failure mode is `import anthropic` / missing secret making
+# critique() fall back to deterministic feedback WITHOUT crashing (critic silently off).
+# ---------------------------------------------------------------------------
+@app.function(image=image, secrets=[modal.Secret.from_name("anthropic")], timeout=5 * 60)
+def critic_check_remote():
+    import os
+    import sys
+    os.chdir("/root/app")
+    sys.path.insert(0, "/root/app")  # in-process import (no subprocess) needs the flat dir on path
+    from sdpo_critic import critique
+    fb = "Verdict: WA.\nExpected output:\n7\nYour output:\n-1"
+    out = critique("Read two integers a, b from stdin and print a+b.",
+                   "a,b=map(int,input().split())\nprint(a-b)", "WA", fb, "python")
+    fired = out != fb  # a real critique came back (not the deterministic fallback)
+    print(f"[critic_check] ANTHROPIC_API_KEY set={bool(os.environ.get('ANTHROPIC_API_KEY'))} "
+          f"critic_fired={fired} ({len(out)} chars)", flush=True)
+    print("--- critique head ---\n" + out[:500], flush=True)
+    return {"fired": fired, "chars": len(out)}
+
+
+@app.local_entrypoint()
+def critic_check():
+    """modal run src/modal_sdpo.py::critic_check — confirms the critic calls Claude on Modal."""
+    r = critic_check_remote.remote()
+    print(f"[modal] critic_check: {r}  -> {'OK (critic live)' if r['fired'] else 'FALLBACK (critic OFF!)'}")
 
 
 # ---------------------------------------------------------------------------

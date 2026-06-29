@@ -32,6 +32,10 @@ def main():
     ap.add_argument("--max-steps", type=int, default=60)
     ap.add_argument("--num-generations", type=int, default=8)
     ap.add_argument("--lr", type=float, default=1e-4)
+    ap.add_argument("--distillation-weight", type=float, default=1.0,
+                    help="hybrid blend: loss=(1-w)*GRPO + w*SDPO. 1.0=pure SDPO, 0.0=pure GRPO")
+    ap.add_argument("--teacher-kind", default="ema", choices=["ema", "base", "live"],
+                    help="SDPO teacher: base=fixed/initial (iteration-05), ema=weight-EMA, live=current")
     ap.add_argument("--max-completion-length", type=int, default=8192)
     ap.add_argument("--max-prompt-length", type=int, default=3072)
     ap.add_argument("--output-dir", default="sdpo_out")
@@ -45,6 +49,13 @@ def main():
     ap.add_argument("--vllm-gpu-util", type=float, default=0.45)
     ap.add_argument("--reward-mode", default="fraction", choices=["fraction", "binary"],
                     help="dense passed/total (default) or strict AC=1/else 0")
+    ap.add_argument("--grpo-reward", default="fraction", choices=["fraction", "binary"],
+                    help="reward feeding the GRPO policy ADVANTAGE (feedback path only). "
+                         "binary=AC 1/0 (iteration-05: clean policy signal); the SDPO teacher "
+                         "gating always uses the dense fraction (see --sdpo-threshold).")
+    ap.add_argument("--sdpo-threshold", type=float, default=1.0,
+                    help="success_reward_threshold for SDPO teacher selection, applied to the "
+                         "dense FRACTION. 1.0=AC-only; <1.0 (e.g. 0.5) lets near-miss rollouts teach.")
     ap.add_argument("--feedback", action="store_true",
                     help="live per-rollout judge feedback into the SDPO teacher (iteration 02)")
     ap.add_argument("--critic", action="store_true",
@@ -119,31 +130,49 @@ def main():
         bus = FeedbackBus()
         reward = make_feedback_reward_func(bus, which="public", timeout=6.0, reward_mode=args.reward_mode,
                                            critic=args.critic, critic_model=args.critic_model,
-                                           critic_thinking=args.critic_thinking)
+                                           critic_thinking=args.critic_thinking,
+                                           grpo_reward=args.grpo_reward)
     else:
         reward = make_reward_func(which="public", timeout=6.0, reward_mode=args.reward_mode)
 
     # Restrict LoRA to the TEXT model (language_model). gemma4's vision/audio
     # towers wrap projections in Gemma4ClippableLinear which PEFT can't target;
     # the text projections are plain nn.Linear. Regex => re.fullmatch in PEFT.
+    # LoRA targets are model-shape-specific. gemma4 wraps text projections under
+    # `language_model.*` (its vision/audio towers use Gemma4ClippableLinear that PEFT
+    # can't wrap); Qwen3 is a plain text decoder -> target the proj suffixes across ALL
+    # layers with no prefix. A gemma regex matches NOTHING on Qwen3 (no adapter attaches).
+    _proj = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+    targets = _proj if "qwen" in args.model.lower() \
+        else r".*language_model.*\.(" + "|".join(_proj) + r")$"
     peft_cfg = LoraConfig(
         r=32, lora_alpha=64, lora_dropout=0.0, bias="none", task_type="CAUSAL_LM",
-        target_modules=r".*language_model.*\.(q_proj|k_proj|v_proj|o_proj|gate_proj|up_proj|down_proj)$",
+        target_modules=targets,
     )
 
     report_to = "none" if (args.no_wandb or not os.environ.get("WANDB_API_KEY")) else "wandb"
     if report_to == "wandb":
         os.environ.setdefault("WANDB_PROJECT", "sdpo-gemma-ojbench")
 
+    # Informative run name: model · signal source · distill weight · reward mode · teacher · steps
+    # e.g. sdpo-qwen3-8b-critic-d0.1-binary-base-s20 — so runs are self-describing in the W&B list.
+    _model_short = args.model.split("/")[-1].lower().replace(".", "")
+    _signal = "critic" if args.critic else ("fb" if args.feedback else "verifier")
+    # e.g. sdpo-qwen3-8b-critic-d0.1-grpobin-sdpo0.5-base-s20
+    run_name = (f"sdpo-{_model_short}-{_signal}-d{args.distillation_weight}"
+                f"-grpo{'bin' if args.grpo_reward == 'binary' else 'frac'}"
+                f"-sdpo{args.sdpo_threshold}-{args.teacher_kind}-s{args.max_steps}"
+                + ("-smoke" if args.smoke else ""))
+
     cfg = SDPOConfig(
         output_dir=args.output_dir,
         # --- SDPO core ---
-        distillation_weight=1.0,            # pure self-distillation
+        distillation_weight=args.distillation_weight,   # hybrid: (1-w)*GRPO + w*SDPO
         distillation_mode="topk_logits",
         distillation_topk=100,
-        teacher_model_kind="ema",
+        teacher_model_kind=args.teacher_kind,           # "base"=fixed/initial (iteration-05 T0)
         use_successful_as_teacher=True,
-        success_reward_threshold=1.0,
+        success_reward_threshold=args.sdpo_threshold,  # applied to the dense FRACTION (feedback path)
         # Live judge feedback into the teacher. feedback-only-without-solution targets
         # the ALL-FAIL groups (iteration-01's gap: no successful rollout -> no teacher);
         # success groups still use the solution. This also bounds teacher-prompt length
@@ -178,7 +207,7 @@ def main():
         save_total_limit=None,  # keep every checkpoint (we want the per-20-step history)
         bf16=True,
         report_to=report_to,
-        run_name="sdpo-gemma-ojbench" + ("-smoke" if args.smoke else ""),
+        run_name=run_name,
     )
 
     if args.feedback:

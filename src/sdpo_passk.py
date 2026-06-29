@@ -91,22 +91,39 @@ def main():
                                          reward_mode="binary")
         return verdict
 
+    def _safe_judge(text, pid, lang):
+        # A single completion's judge must never sink the whole eval — record ERR
+        # (counts as non-AC) instead of raising (the buffer-all anti-pattern).
+        try:
+            return _judge(text, pid, lang)
+        except Exception as e:
+            print(f"  [WARN] judge failed {lang}|loj-{pid}: {type(e).__name__}: {e}", flush=True)
+            return "ERR"
+
     def one(t):
         lang, pid, prompt = t
         msgs = sys_msg + [{"role": "user", "content": prompt}]
         verdicts = []
-        if args.single_sample:
-            # n separate n=1 requests — avoids the GB10 multi-sample (n>1) hang.
-            for _ in range(args.n):
-                r = client.chat.completions.create(
+        try:
+            if args.single_sample:
+                # n separate n=1 requests — avoids the GB10 multi-sample (n>1) hang.
+                for _ in range(args.n):
+                    r = client.chat.completions.create(
+                        model=args.served_model, messages=msgs, temperature=args.temperature,
+                        top_p=args.top_p, max_tokens=args.max_tokens, n=1)
+                    verdicts.append(_safe_judge(r.choices[0].message.content or "", pid, lang))
+            else:
+                resp = client.chat.completions.create(
                     model=args.served_model, messages=msgs, temperature=args.temperature,
-                    top_p=args.top_p, max_tokens=args.max_tokens, n=1)
-                verdicts.append(_judge(r.choices[0].message.content or "", pid, lang))
-        else:
-            resp = client.chat.completions.create(
-                model=args.served_model, messages=msgs, temperature=args.temperature,
-                top_p=args.top_p, max_tokens=args.max_tokens, n=args.n)
-            verdicts = [_judge(ch.message.content or "", pid, lang) for ch in resp.choices]
+                    top_p=args.top_p, max_tokens=args.max_tokens, n=args.n)
+                verdicts = [_safe_judge(ch.message.content or "", pid, lang) for ch in resp.choices]
+        except Exception as e:
+            # A failed generation request must not crash the run (and discard every other
+            # problem's work). Backfill ERR verdicts so this problem still contributes a
+            # (conservative) 0/n and the eval completes + writes results.
+            print(f"  [WARN] generation failed {lang}|loj-{pid}: {type(e).__name__}: {e}; "
+                  f"recording {args.n - len(verdicts)} ERR verdict(s)", flush=True)
+            verdicts += ["ERR"] * (args.n - len(verdicts))
         n_ac = sum(v == "AC" for v in verdicts)
         return {"id": pid, "language": lang, "difficulty": DIFF_BY_ID[pid],
                 "n": len(verdicts), "n_ac": n_ac, "verdicts": verdicts}

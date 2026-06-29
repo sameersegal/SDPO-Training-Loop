@@ -22,3 +22,57 @@
   writes durably to the `sdpo-outputs` volume).
 - `src/sdpo_passk.py` — `--limit N` (easy-first) for cheap smokes.
 - `src/plot_opportunity.py` — model-agnostic opportunity-gap + frontier plotter from any `sdpo_passk_*.json`.
+
+## SDPO + critic training run (Qwen3-8B) and ckpt-20 eval  — 2026-06-29
+
+- **What:** SDPO + LLM trace-aligned critic (`claude-sonnet-4-6`) on the OJBench easy+medium train
+  band (63 problems → 126 py+cpp rows), binary-GRPO / fractional-SDPO reward split.
+- **Config:** `Qwen/Qwen3-8B · H200 · easy,medium · python,cpp · G=8 · max_completion 20480 ·
+  max_steps 20 · save_steps 5 · vllm_gpu_util 0.20 · lr 1e-4 · distillation_weight 0.1 ·
+  teacher_kind base · --critic · --grpo-reward binary · --sdpo-threshold 0.5 · system cp_method`.
+- **Modal app (train):** `ap-oeiw6nb406wU2KP1YlKYFM` (H200) — **$10.86** (H200 $9.26 · CPU $1.54).
+- **W&B (train):** run `8281dbd7`, name `sdpo-qwen3-8b-critic-d0.1-grpobin-sdpo0.5-base-s20`,
+  state **finished**, 20 steps, train_loss 0.0096, **epoch 0.3175** (~40/126 rows seen — the model
+  did NOT see all train data in 20 steps).
+- **Health (step-0 canaries, all green):** no OOM at 20k/0.20; `success_group_fraction` 0.5–1.0
+  (binary-GRPO/fractional-SDPO split working — near-misses count); `reward_mean` (binary AC) noisy
+  0.25→0; `reward_max` 1.
+- **Checkpoints (volume `sdpo-outputs` root = the `sdpo_out` mount):** checkpoint-5/10/15/20, all
+  fresh 2026-06-29 (08:02 / 08:22 / 08:49 / 09:19 IST) + top-level `adapter_model.safetensors` (09:19).
+- **Adapter preserved:** copied checkpoint-20's `adapter_model.safetensors` + `adapter_config.json`
+  to `sdpo-outputs:/iteration-05/checkpoint-20/` so the next run can't overwrite it. (V1 volume:
+  no recursive cp; optimizer/scheduler states left in the root checkpoint-20, not preserved.)
+
+### Eval: base vs checkpoint-20 — held-out pass@k (Python, n=8, temp 0.8, system cp_method)
+- **Scope (decided):** **checkpoint-20 only** (no 15/10/5), and after a 2h-timeout crash on the full
+  25, **easy+medium only** (`--limit 10`, easy-first ⇒ the 5 easy + 5 medium; the 15 hard are flat
+  0/8 for both base + ckpt-20 and were the slow 32k-thinking tail).
+- **Result (no measurable change — expected null for a 20-step / ~32%-of-data prototype):**
+
+  | split | metric | base | ckpt-20 |
+  |---|---|---|---|
+  | overall | pass@1 / @2 / @4 / @8 | 0.425 / 0.518 / 0.586 / **0.600** | 0.388 / 0.514 / 0.590 / **0.600** |
+  | easy | pass@1 / @8 | 0.650 / 0.800 | 0.575 / 0.800 |
+  | medium | pass@1 / @8 | 0.200 / 0.400 | 0.200 / 0.400 |
+
+  pass@8 identical at every level; pass@1 −0.037 overall is **within base's run-to-run noise** (base's
+  earlier same-day run scored pass@1 0.388 vs 0.425 here — ±0.04 wobble on 5+5 problems at temp 0.8).
+- **Modal apps (eval):**
+  - `ap-3Z15ubX7ZNyXA01rphyFFX` — full-25 attempt, **$15.75**, **CRASHED** (sdpo container hit the 2h
+    `passk_one` function timeout on the hard 32k tail; base side survived in W&B). Wasted.
+  - `ap-cXQiWXakvlqzQbHcvfoI6I` — first easy+medium attempt, **$6.22**, crashed + Modal-retried on the
+    same buggy `sdpo_passk` loop; killed. Wasted.
+  - `ap-t0qNeih46t3H37Ju98unti` — easy+medium with the fixed loop, **$6.03**, **succeeded**.
+- **W&B (eval):** `passk-base` (the easy+medium base, overall pass@1 0.425) + the paired ckpt-20 run.
+- **Artifacts (committed):** `data/sdpo_passk_ckpt20eval_base_easymed.json`,
+  `data/sdpo_passk_ckpt20_easymed.json` (per-problem verdicts + summary).
+- **Total iteration spend this day:** **$39.74** (training $10.86 + eval $28.0; ~$22 of eval lost to
+  the timeout crash + retry-loop before the fix).
+
+### Code added/changed for this run
+- `src/modal_sdpo.py` — `passk_one` / `eval_checkpoint` gained a `limit` passthrough (→ `sdpo_passk
+  --limit N`), so eval can target the easy+medium band and skip the slow, zero-signal hard tail.
+- `src/sdpo_passk.py` — **resilience fix:** the per-problem `one()` eval loop now wraps generation
+  and judging in try/except; a failed request/judge degrades to an `ERR` (non-AC) verdict instead of
+  raising and sinking the whole run (the buffer-all anti-pattern that caused `ap-cXQiWXak...` to crash
+  after all generation and Modal to retry the same bug).

@@ -389,12 +389,15 @@ def evaluate(which: str):
 def passk_one(which: str, languages: str = "python",
               adapter: str = "/root/app/sdpo_out", ojb_splits: str = "ojb_splits.json",
               tag: str = "", model: str = "Qwen/Qwen3-8B",
-              max_model_len: int = 40960, max_tokens: int = 32768):
+              max_model_len: int = 40960, max_tokens: int = 32768, limit: int = 0):
     """pass@k only (returns as soon as it finishes — no slow held-out/gsm8k tail).
 
     adapter: LoRA dir to serve when which=='sdpo' (e.g. .../sdpo_out/checkpoint-20).
     ojb_splits: which split's held-out to eval on (iteration-05 -> ojb_splits.json's 25).
     Qwen3-8B is thinking-ON: max_tokens MUST be ~32k or it NO_CODEs (CLAUDE.md gotcha).
+    limit: cap to first N tasks (easy-first); with langs=python, --limit 10 = the 5 easy +
+      5 medium held-out problems and SKIPS the 15 hard (flat 0/8, the slow 32k-thinking tail
+      that overran the 2h fn timeout). 0 = full 25-problem split.
     """
     import json
     import os
@@ -427,11 +430,13 @@ def passk_one(which: str, languages: str = "python",
                 raise RuntimeError("vLLM exited during startup")
             time.sleep(5)
     try:
-        subprocess.run(["python", "sdpo_passk.py", "--served-model", served,
-                        "--tag", tag, "--n", "8", "--ks", "1,2,4,8",
-                        "--max-tokens", str(max_tokens), "--temperature", "0.8",
-                        "--languages", languages, "--concurrency", "16",
-                        "--wandb"], check=True)
+        _cmd = ["python", "sdpo_passk.py", "--served-model", served,
+                "--tag", tag, "--n", "8", "--ks", "1,2,4,8",
+                "--max-tokens", str(max_tokens), "--temperature", "0.8",
+                "--languages", languages, "--concurrency", "16", "--wandb"]
+        if limit:
+            _cmd += ["--limit", str(limit)]
+        subprocess.run(_cmd, check=True)
     finally:
         srv.terminate()
     return json.load(open(f"sdpo_passk_{tag}.json"))
@@ -451,16 +456,19 @@ def passk_run(which: str = "sdpo", languages: str = "python", out: str = ""):
 @app.local_entrypoint()
 def eval_checkpoint(checkpoint: str = "checkpoint-20", languages: str = "python",
                     ojb_splits: str = "ojb_splits.json", model: str = "Qwen/Qwen3-8B",
-                    gpu: str = "H200"):
+                    gpu: str = "H200", limit: int = 0):
     """Held-out pass@k for base vs ONE checkpoint, in parallel — the cheap sanity check.
       modal run src/modal_sdpo.py::eval_checkpoint --checkpoint checkpoint-10 --languages python
+    limit: cap to first N tasks (easy-first). --limit 10 (python) = the 10 easy+medium held-out
+      problems, skipping the 15 hard (0/8 + the slow 32k tail that overran the 2h timeout).
     """
     import json
     adapter = f"/root/app/sdpo_out/{checkpoint}"
-    print(f"[modal] eval base vs {checkpoint} ({adapter}) on {ojb_splits} held-out, langs={languages}")
+    print(f"[modal] eval base vs {checkpoint} ({adapter}) on {ojb_splits} held-out, "
+          f"langs={languages}, limit={limit or 'full'}")
     p = passk_one.with_options(gpu=gpu)
-    base_call = p.spawn("base", languages, adapter, ojb_splits, "base", model=model)
-    sdpo_call = p.spawn("sdpo", languages, adapter, ojb_splits, checkpoint.replace("-", ""), model=model)
+    base_call = p.spawn("base", languages, adapter, ojb_splits, "base", model=model, limit=limit)
+    sdpo_call = p.spawn("sdpo", languages, adapter, ojb_splits, checkpoint.replace("-", ""), model=model, limit=limit)
     base_res, sdpo_res = base_call.get(), sdpo_call.get()
     for name, res in [("base", base_res), (checkpoint, sdpo_res)]:
         with open(f"sdpo_passk_{name.replace('-', '')}.json", "w") as f:

@@ -1,6 +1,17 @@
 # Iteration 05 — Qwen3-8B SDPO with an LLM trace-aligned critic (logprob-gated, ≤20 steps)
 
-**Status: IN PROGRESS.** First run on an **in-regime (~8B) model**, after iterations 01–03 on
+**Status: DONE (clean end-to-end run; expected null on held-out).** The deliverable — one clean
+end-to-end SDPO+critic run on an in-regime (~8B) model without collapse/OOM/hang — is met. Training:
+Qwen3-8B, 20 steps, W&B run `8281dbd7` **finished**, all checkpoints saved (`ap-oeiw6nb4…`, $10.86).
+Eval (ckpt-20 vs base, held-out **easy+medium**, Python, pass@k n=8): **no measurable change** —
+overall pass@8 **0.600 → 0.600** (easy 0.80→0.80, medium 0.40→0.40); pass@1 0.425→0.388 is within
+base's own ±0.04 run-to-run noise. This is the **expected null for a 20-step / ~32%-of-data
+prototype** (epoch 0.3175), and beating base was explicitly **not** the bar. Full numbers, app ids,
+the 2h-timeout crash + `sdpo_passk` resilience fix, and spend ($39.74 total) → [PROVENANCE.md](./PROVENANCE.md).
+Open follow-up (not run): a **train==eval** probe (seen-train / unseen-train / held-out 3-point
+curve, easy+medium, judged private) — a more sensitive test of whether the optimization moved at all.
+
+First run on an **in-regime (~8B) model**, after iterations 01–03 on
 Gemma-4-E2B (~2B) showed the small-scale failure the original SDPO paper predicts. This iteration
 fuses two things: the **Qwen3-8B de-risk plan** (one clean, interpretable run, gated behind a
 logprob check) **and** the single change iteration-04 most predicts will make SDPO teach — replacing

@@ -1,6 +1,6 @@
-# SDPO Training Loop — Gemma-4-E2B-it on OJBench
+# SDPO Training Loop — Qwen3-8B on OJBench
 
-Post-train **Gemma-4-E2B-it** with **SDPO (Self-Distillation Policy Optimization)** on
+Post-train **Qwen3-8B** with **SDPO (Self-Distillation Policy Optimization)** on
 **OJBench** competitive-programming problems, with a hybrid held-out generalization set and a
 GSM8K regression probe.
 

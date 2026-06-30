@@ -511,6 +511,33 @@ def probe_solve_rate(ids: str = "", languages: str = "python", n: int = 12,
 
 
 @app.local_entrypoint()
+def eval_iterations(ids: str = "", checkpoints: str = "", n: int = 12, temperature: float = 0.8,
+                    languages: str = "python", tag_prefix: str = "iters30", gpu: str = "H200",
+                    model: str = "Qwen/Qwen3-8B"):
+    """iteration-08 DEFINITIVE eval: base + a list of checkpoints on the SAME ids (matched
+    cross-iteration pass@k), all in PARALLEL. checkpoints = comma list of volume paths, e.g.
+    'iteration-05/checkpoint-20,iter06-fast/checkpoint-8'. n>k => pass@k is graded (less noisy)."""
+    import json
+    p = passk_one.with_options(gpu=gpu)
+    calls = [(f"{tag_prefix}_base",
+              p.spawn("base", languages, "/root/app/sdpo_out", "ojb_splits.json",
+                      f"{tag_prefix}_base", model=model, ids=ids, n=n, temperature=temperature))]
+    for ck in [c.strip() for c in checkpoints.split(",") if c.strip()]:
+        tag = f"{tag_prefix}_" + ck.replace("-", "").replace("/", "_")
+        calls.append((tag, p.spawn("sdpo", languages, f"/root/app/sdpo_out/{ck}", "ojb_splits.json",
+                                   tag, model=model, ids=ids, n=n, temperature=temperature)))
+    for tag, c in calls:
+        try:
+            res = c.get()
+            json.dump(res, open(f"sdpo_passk_{tag}.json", "w"), indent=2)
+            ov = res["summary"]["overall"]
+            print(f"[eval-iters] {tag}: pass@1={ov.get('pass@1')} pass@8={ov.get('pass@8')} "
+                  f"n_problems={ov.get('n_problems')}")
+        except Exception as e:  # noqa: BLE001
+            print(f"[eval-iters] {tag} FAILED: {e}")
+
+
+@app.local_entrypoint()
 def eval_checkpoint(checkpoint: str = "checkpoint-20", languages: str = "python",
                     ojb_splits: str = "ojb_splits.json", model: str = "Qwen/Qwen3-8B",
                     gpu: str = "H200", limit: int = 0, ids: str = "", tag_suffix: str = ""):

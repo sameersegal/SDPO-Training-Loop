@@ -127,11 +127,14 @@ setsid nohup .venv/bin/modal run --detach src/modal_sdpo.py::main \
   --lr 1e-4 --lr-scheduler constant_with_warmup --warmup-ratio 0.1 \
   --num-generations 16 --max-steps 30 --save-steps 5 \
   --difficulties easy,medium --languages python \
-  --output-dir iter09-dose --max-completion-length 20480 \
+  --output-dir sdpo_out/iter09-dose --max-completion-length 20480 \
   > runs/iteration-09/train.log 2>&1 < /dev/null &
 ```
-(`--save-steps 5` ⇒ ckpts 5/10/…/30; keep ≤ interruption interval for `--resume`. G=16 stays microbatch=1
-so no OOM — it adds grad-accum steps, not peak memory; ~2× slower/step than iter-08, watch cadence.)
+(**`--output-dir sdpo_out/iter09-dose`** — the `sdpo_out/` prefix is MANDATORY: train chdir's to `/root/app`
+and the volume mounts at `/root/app/sdpo_out`, so a bare `iter09-dose` writes OFF-volume and is lost. The
+preflight caught exactly this. On the volume it appears as `/iter09-dose`; `eval_dose --output-dir
+iter09-dose` reads it back. `--save-steps 5` ⇒ ckpts 5/10/…/30, ≤ interruption interval for `--resume`.
+G=16 stays microbatch=1 so no OOM — adds grad-accum steps, not peak memory; ~2× slower/step than iter-08.)
 
 **Eval (lean + durable, dose–response):** generate on H200, judge on GB10.
 ```

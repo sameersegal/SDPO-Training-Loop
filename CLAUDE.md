@@ -149,6 +149,13 @@ Figures: `python src/generate_slides.py` (set `ITER=iteration-NN`); cross-iterat
   thing. The cpp judge can stall on a pathological completion — harden before trusting at scale.
 - **Modal:** code+data ship to a **flat `/root/app`** layout; OJBench test cases come from the
   `ojbench-data` Volume; adapters land in `sdpo-outputs` (preserve per iteration under `/iteration-NN/`).
+- **`--output-dir` MUST be prefixed `sdpo_out/<name>` or the run's checkpoints are LOST.** `train()`
+  chdir's to `/root/app` but the `sdpo-outputs` volume mounts at `/root/app/sdpo_out`. A bare
+  `--output-dir iter09-dose` writes to `/root/app/iter09-dose` — *off* the mount — so the periodic
+  commit captures nothing and a 10h run ends with zero checkpoints on the volume (and `eval_dose` finds
+  nothing). Use `--output-dir sdpo_out/iter09-dose` → lands at `volume:/iter09-dose`. iter-09's preflight
+  caught this; the bare-name form is also why loose `checkpoint-*` litter the volume root from old runs.
+  Eval entrypoints take the BARE name (`eval_dose --output-dir iter09-dose`) — they prepend `sdpo_out/`.
 
 ## Preserving each iteration
 Commit small/diffable artifacts to `reports/iteration-NN/`: `REPORT.md` (self-contained, embeds

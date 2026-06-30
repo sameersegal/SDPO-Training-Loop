@@ -1,0 +1,7 @@
+iteration,modal_app,usd,reason,source
+iteration-03,(six apps, see note),~30.00,"First full-run attempt: SIX integration failures (serial-judging stall, missing ICPC volume data, parallel-extraction race, CUDA-graph hang, a hung run, a run cancelled mid-stream). Each dead before the first checkpoint.",reports/iteration-03/REPORT.md + CLAUDE.md
+iteration-03,ap-PwzMsdnAGdYDD666XDA3Xj,3.16,"Hung detached run; zero progress.",CLAUDE.md (budget-discipline note)
+iteration-03,ap-GxyGoDsP7MBMBE7lkxUmWg,4.86,"Run cancelled at step 11 (attached client signal-killed mid-stream sent a cancel).",CLAUDE.md (decoupled-launch note)
+iteration-05-main,ap-3Z15ubX7ZNyXA01rphyFFX,15.75,"Full-25 held-out pass@k CRASHED on the 2h passk_one function timeout (hard 32k-thinking tail).",reports/iteration-05/PROVENANCE.md
+iteration-05-main,ap-cXQiWXakvlqzQbHcvfoI6I,6.22,"First easy+medium attempt crashed + Modal-retried on the buggy buffer-all sdpo_passk loop.",reports/iteration-05/PROVENANCE.md
+iteration-05-main,ap-mxjKMxEWyOYWZYH7sI8WW6,1.37,"38-problem train==eval run killed for speed (superseded by the accelerated 6+6 subset run).",reports/iteration-05/PROVENANCE.md

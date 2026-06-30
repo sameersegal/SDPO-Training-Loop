@@ -1,0 +1,8 @@
+iteration,window_date,total_usd,train_usd,eval_usd,infra_usd,not_productive_usd,confidence,source
+iteration-01,2026-06-26,15.00,6.00,7.00,2.00,0.00,documented-estimate,reports/iteration-01/PROVENANCE.md (~$15 cap; train ~$6 + evals + smokes)
+iteration-02,2026-06-26,16.00,8.00,6.00,2.00,0.00,estimate,reports/iteration-02/REPORT.md (RUN 1 COMPLETE; no PROVENANCE; 06-26 day total $31.38 minus iter-01 $15)
+iteration-03,2026-06-27,40.21,5.00,0.00,5.00,30.21,documented-magnitude,reports/iteration-03/REPORT.md + CLAUDE.md (~$30 across SIX integration failures; status PLANNED)
+iteration-04,2026-06-28,0.00,0.00,0.00,0.00,0.00,pinned,reports/iteration-04/PROVENANCE.md ($0 - local GB10 only)
+iteration-05-phase0,2026-06-28,15.15,0.00,14.15,1.00,0.00,documented-estimate,reports/iteration-05/PROVENANCE.md (Qwen3-8B base opportunity $3.32 + teacher/rollout probes; smoke $0.92)
+iteration-05-main,2026-06-29,49.91,10.86,15.71,0.00,23.34,pinned-plus-estimate,reports/iteration-05/PROVENANCE.md (train $10.86; waste crash $15.75 + retry $6.22 + killed $1.37)
+iteration-06,2026-06-30,17.57,9.40,8.17,0.00,0.00,pinned-partial,reports/iteration-06/REPORT.md + RUNNING_APP_ID.txt (fast train $9.40 + 12-probe/GSM8K eval; partial interval)

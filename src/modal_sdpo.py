@@ -589,6 +589,68 @@ def eval_iterations(ids: str = "", checkpoints: str = "", n: int = 12, temperatu
               f"--samples \"$f\" --tag \"$(basename $f _samples.jsonl | sed s/sdpo_passk_//)\"; done")
 
 
+@app.function(image=image, volumes=VOLUMES, timeout=300)
+def _ls_volume(subdir: str):
+    """List a subdir under the sdpo-outputs volume (stateless helper for pipeline-eval)."""
+    import os
+    outputs.reload()
+    p = f"/root/app/sdpo_out/{subdir}"
+    return sorted(os.listdir(p)) if os.path.isdir(p) else []
+
+
+@app.local_entrypoint()
+def eval_dose(output_dir: str = "iter09-dose", ids: str = "", steps: str = "10,20,30",
+              tag_prefix: str = "iter09dose", n: int = 24, temperature: float = 0.8,
+              languages: str = "python", max_tokens: int = 24576, max_seqs: int = 96,
+              gpu: str = "H200", judge: bool = False, base: bool = True,
+              model: str = "Qwen/Qwen3-8B"):
+    """PIPELINE-EVAL (iter-09): dispatch eval for base + any TARGET checkpoint that has LANDED on the
+    volume but isn't evaluated yet — concurrently with training, so the dose-response eval adds ~0
+    wall-clock. ONE-SHOT + IDEMPOTENT: re-run it each time a checkpoint commits (skips base/ckpts already
+    evaluated). Artifacts persist to sdpo-outputs:/evals/<tag_prefix>/ (pull the whole folder; judge on
+    the GB10 with judge_local.py when judge=False)."""
+    import json
+    eval_dir = f"evals/{tag_prefix}"
+    present = {d for d in _ls_volume.remote(output_dir) if d.startswith("checkpoint-")}
+    present_steps = {int(d.split("-")[1]) for d in present if d.split("-")[1].isdigit()}
+    done = set(_ls_volume.remote(eval_dir))
+
+    def already(tag):  # judged path writes <tag>.json; no-judge writes <tag>_samples.jsonl
+        return f"sdpo_passk_{tag}.json" in done or f"sdpo_passk_{tag}_samples.jsonl" in done
+
+    p = passk_one.with_options(gpu=gpu)
+    kw = dict(model=model, ids=ids, n=n, temperature=temperature, max_tokens=max_tokens,
+              max_seqs=max_seqs, eval_dir=eval_dir, judge=judge)
+    jobs = []
+    btag = f"{tag_prefix}_base"
+    if base and not already(btag):
+        jobs.append((btag, p.spawn("base", languages, "/root/app/sdpo_out", "ojb_splits.json",
+                                   btag, **kw)))
+    for s in sorted(int(x) for x in steps.split(",") if x.strip()):
+        tag = f"{tag_prefix}_ckpt{s}"
+        if s not in present_steps:
+            print(f"[eval-dose] checkpoint-{s} not on volume yet — re-run when it lands"); continue
+        if already(tag):
+            print(f"[eval-dose] checkpoint-{s} already evaluated — skip"); continue
+        jobs.append((tag, p.spawn("sdpo", languages,
+                                  f"/root/app/sdpo_out/{output_dir}/checkpoint-{s}",
+                                  "ojb_splits.json", tag, **kw)))
+    if not jobs:
+        print("[eval-dose] nothing new ready this pass."); return
+    for tag, c in jobs:
+        try:
+            res = c.get()
+            json.dump(res, open(f"sdpo_passk_{tag}.json", "w"), indent=2)
+            print(f"[eval-dose] {tag}: done -> sdpo-outputs:/{eval_dir}/")
+        except Exception as e:  # noqa: BLE001
+            print(f"[eval-dose] {tag} FAILED: {e}")
+    print(f"\n[eval-dose] pull all:  .venv/bin/modal volume get sdpo-outputs /{eval_dir} ./")
+    if not judge:
+        print(f"[eval-dose] judge:    for f in {tag_prefix}/sdpo_passk_*_samples.jsonl; do "
+              f"python src/judge_local.py --samples \"$f\" "
+              f"--tag \"$(basename $f _samples.jsonl | sed s/sdpo_passk_//)\"; done")
+
+
 @app.local_entrypoint()
 def eval_checkpoint(checkpoint: str = "checkpoint-20", languages: str = "python",
                     ojb_splits: str = "ojb_splits.json", model: str = "Qwen/Qwen3-8B",

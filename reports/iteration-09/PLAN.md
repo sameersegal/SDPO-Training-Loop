@@ -147,3 +147,39 @@ for f in iter09dose/sdpo_passk_*_samples.jsonl; do \
 Then `iters30_analysis.py` **retargeted to pass@1** (primary) + the pass@1/2/4/8 curve, split
 `train_eval` vs `heldout` (`data/eval_iter09.json`), with the per-checkpoint ΔW (`src/adapter_delta.py`)
 overlaid as the dose axis. Live monitoring: ΔW + grad_norm in the first ~5 steps, length/entropy canary.
+
+## 8. Execution & time budget (knobs FROZEN — this section is operational only)
+Dominant cost is the ~10 h training run (G=16 ≈ 2× iter-08's ~12 min/step). Two time levers, neither
+touches a frozen knob.
+
+**De-risk ladder FIRST (conservative — do NOT skip; important changes = G 8→16, flat LR, 30 steps):**
+1. `pytest tests/` — free, logic.
+2. **Modal smoke** `modal run …::main --smoke` (~minutes, cents) — image + data + judge wiring. *(GB10
+   smoke is deliberately skipped: the 8B thinking-ON backward OOM-cascades the GB10's 128 GB and can kill
+   the box — `sdpo-gb10-8b-training-viable`; it would not represent the H200 run anyway.)*
+3. **Representative preflight** — the key de-risk for G=16: **3 REAL steps at full
+   `--max-completion-length 20480`, `--num-generations 16`, `--save-steps 1`** on the H200 (the `--smoke`
+   512-cap would HIDE the real memory/timing surface). Validates: no OOM at the loss step with G=16, real
+   per-step cadence, a checkpoint write **and a `--resume`**, and previews **Gate 0** (grad_norm at LR
+   1e-4). ~15 min / ~$1 vs a multi-hour late failure. Only after this passes → the long run.
+
+**#1 Pipeline-eval (overlap eval with training → ~0 added wall-clock):** as each checkpoint commits to the
+volume, eval it *while training continues*. Driver = `modal_sdpo.py::eval_dose` (one-shot, **idempotent** —
+skips base/ckpts already evaluated, skips ckpts not yet landed). Re-run on each save:
+```
+.venv/bin/modal run src/modal_sdpo.py::eval_dose --judge False \
+  --output-dir iter09-dose --tag-prefix iter09dose --steps 10,20,30 --n 24 \
+  --ids 3008,2590,2610,2498,2612,2499,2603,2132,2667,2415,4001,2608,2294,3565,2445,2129,2951,3896
+```
+Base evals immediately (no training dep); ckpt-10 evals the moment it lands while training runs to 20, etc.
+All artifacts → `sdpo-outputs:/evals/iter09dose/`; pull + judge on GB10 (`judge_local.py`).
+
+**#2 Early-kill gates (expected ~20–40% off; preserves the frozen recipe — just exit conditions):**
+- **Gate 0 — dose landing? (~step 3–5, ~1 h in).** From W&B `grad_norm` (and/or pull `checkpoint-K` →
+  `src/adapter_delta.py`): if grad_norm is still ~0.02 / ΔW per-step ≈ iter-08's 0.058 at LR 1e-4 →
+  **kill**, the dose isn't landing (raise LR / check schedule) before burning ~9 h.
+- **Gate 1 — answer in hand? (ckpt-10 then ckpt-20 dose–response).** If `train_eval` pass@1 is *already*
+  cleanly separating from base (CI excludes 0) **or** clearly flat with the model demonstrably moved
+  (ΔW up, completions changed) and the canary clean → **stop at 20, not 30**; the curve has answered H1 vs H2.
+- **Canary (every step).** `mean_length`/entropy drops sharply by ~step 6 → LR too hot (re-collapse);
+  kill, back off to 5e-5. (Watchdog + `--resume` already cap a silent hang at minutes, not hours.)

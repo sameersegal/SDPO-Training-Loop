@@ -32,6 +32,30 @@ def main():
     ap.add_argument("--max-steps", type=int, default=60)
     ap.add_argument("--num-generations", type=int, default=8)
     ap.add_argument("--lr", type=float, default=1e-4)
+    # --- anti-collapse regularization (iteration-06) ---
+    ap.add_argument("--beta", type=float, default=0.0,
+                    help="KL anchor to the frozen base/ref model (GRPO/SDPO beta). "
+                         "0.0=off (iteration-05); >0 (e.g. 0.04) penalizes drift from base "
+                         "to counter diversity loss / mode collapse.")
+    ap.add_argument("--lr-scheduler", default="linear",
+                    help="HF lr_scheduler_type: linear|cosine|constant|"
+                         "constant_with_warmup|cosine_with_restarts")
+    ap.add_argument("--warmup-ratio", type=float, default=0.0,
+                    help="fraction of total steps spent warming the LR up from 0 "
+                         "(e.g. 0.1). Avoids slamming a hot LR cold at step 0.")
+    # --- sampling knobs (exposed for transparency; iteration-05 effective values
+    #     were temperature=1.0, top_p=0.95 hardcoded). top_p<1 truncates the tail
+    #     (diversity lever); temperature is the primary exploration knob. ---
+    ap.add_argument("--temperature", type=float, default=1.0,
+                    help="rollout sampling temperature (exploration; higher = more diverse)")
+    ap.add_argument("--top-p", type=float, default=0.95,
+                    help="rollout nucleus sampling top_p (1.0 = no truncation)")
+    # --- observability: persist every rollout to JSONL for offline review (P0-1,
+    #     docs/design/OBSERVABILITY.md). On by default; the iter-05 gap was saving none. ---
+    ap.add_argument("--no-rollout-log", dest="rollout_log", action="store_false",
+                    help="disable per-rollout JSONL capture (default: ON -> "
+                         "<output-dir>/rollouts.jsonl)")
+    ap.set_defaults(rollout_log=True)
     ap.add_argument("--distillation-weight", type=float, default=1.0,
                     help="hybrid blend: loss=(1-w)*GRPO + w*SDPO. 1.0=pure SDPO, 0.0=pure GRPO")
     ap.add_argument("--teacher-kind", default="ema", choices=["ema", "base", "live"],
@@ -125,13 +149,19 @@ def main():
         args.num_generations = 4
         args.max_completion_length = 512
 
+    # Per-rollout JSONL capture (P0-1): stream every rollout's text+verdict+reward+length
+    # to <output-dir>/rollouts.jsonl so a collapse is reviewable after the fact.
+    rollout_path = os.path.join(args.output_dir, "rollouts.jsonl") if args.rollout_log else None
+
     bus = None
     if args.feedback:
         bus = FeedbackBus()
         reward = make_feedback_reward_func(bus, which="public", timeout=6.0, reward_mode=args.reward_mode,
                                            critic=args.critic, critic_model=args.critic_model,
                                            critic_thinking=args.critic_thinking,
-                                           grpo_reward=args.grpo_reward)
+                                           grpo_reward=args.grpo_reward,
+                                           rollout_log=rollout_path,
+                                           sdpo_threshold=args.sdpo_threshold)
     else:
         reward = make_reward_func(which="public", timeout=6.0, reward_mode=args.reward_mode)
 
@@ -184,13 +214,18 @@ def main():
         num_generations=args.num_generations,
         max_completion_length=args.max_completion_length,
         max_prompt_length=args.max_prompt_length,
-        temperature=1.0,
-        top_p=0.95,
+        temperature=args.temperature,
+        top_p=args.top_p,
         use_vllm=True,
         vllm_mode="colocate",
         vllm_gpu_memory_utilization=args.vllm_gpu_util,
         # --- optim ---
         learning_rate=args.lr,
+        # KL anchor to the frozen base + warmup-decay schedule: the iteration-06
+        # anti-collapse levers (iteration-05 ran beta=0.0, linear-from-step-0).
+        beta=args.beta,
+        lr_scheduler_type=args.lr_scheduler,
+        warmup_ratio=args.warmup_ratio,
         # Microbatch keeps the LM-head logits tensor [bs*seq*vocab] small enough
         # to fit alongside colocate vLLM (bs=num_generations OOMs the GB10 at
         # step 0). Effective batch is held at 2*num_generations via accumulation.

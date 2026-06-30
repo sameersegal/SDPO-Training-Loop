@@ -42,9 +42,12 @@ When you change behavior, update the relevant doc in the same change.
 **Component design docs (`docs/design/`)** capture the design of *critical components* —
 independent of any iteration — so they can seed a blog post and outlive a given run. Keep them
 current when you change the component. Existing: `docs/design/JUDGE.md` (judge, reward modes,
-public/private split, smallest-first ordering, feedback, worked-example hint). When you build a
-new critical component (e.g. the live-feedback trainer subclass, the dataset/filter pipeline),
-add a `docs/design/<COMPONENT>.md` rather than burying the rationale in an iteration report.
+public/private split, smallest-first ordering, feedback, worked-example hint); `docs/design/OBSERVABILITY.md`
+(iter-06 rollout/logprob/metric capture so runs are reviewable; **implemented**: rollout JSONL + sampling
+knobs + eval-completion text. Per-token logprobs are regenerated OFFLINE from checkpoints — so preserving
+EVERY checkpoint is mandatory). When you build a new critical component (e.g. the live-feedback trainer subclass, the
+dataset/filter pipeline), add a `docs/design/<COMPONENT>.md` rather than burying the rationale in an
+iteration report.
 
 ## Code map (all in `src/`)
 ```

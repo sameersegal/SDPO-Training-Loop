@@ -66,6 +66,10 @@ def main():
                     help="system prompt for eval (match training: iteration-03 used cp_method)")
     ap.add_argument("--base-url", default="http://localhost:8000/v1")
     ap.add_argument("--wandb", action="store_true")
+    ap.add_argument("--no-save-completions", dest="save_completions", action="store_false",
+                    help="disable per-sample completion capture (default ON -> "
+                         "sdpo_passk_<tag>_samples.jsonl: text+verdict+length per sample)")
+    ap.set_defaults(save_completions=True)
     args = ap.parse_args()
     import sdpo_ojbench as _S
     SYSTEM = _S.SYSTEM_PROMPTS[args.system]
@@ -112,7 +116,7 @@ def main():
     def one(t):
         lang, pid, prompt = t
         msgs = sys_msg + [{"role": "user", "content": prompt}]
-        verdicts = []
+        verdicts, texts = [], []
         try:
             if args.single_sample:
                 # n separate n=1 requests — avoids the GB10 multi-sample (n>1) hang.
@@ -120,28 +124,48 @@ def main():
                     r = client.chat.completions.create(
                         model=args.served_model, messages=msgs, temperature=args.temperature,
                         top_p=args.top_p, max_tokens=args.max_tokens, n=1)
-                    verdicts.append(_safe_judge(r.choices[0].message.content or "", pid, lang))
+                    txt = r.choices[0].message.content or ""
+                    texts.append(txt); verdicts.append(_safe_judge(txt, pid, lang))
             else:
                 resp = client.chat.completions.create(
                     model=args.served_model, messages=msgs, temperature=args.temperature,
                     top_p=args.top_p, max_tokens=args.max_tokens, n=args.n)
-                verdicts = [_safe_judge(ch.message.content or "", pid, lang) for ch in resp.choices]
+                for ch in resp.choices:
+                    txt = ch.message.content or ""
+                    texts.append(txt); verdicts.append(_safe_judge(txt, pid, lang))
         except Exception as e:
             # A failed generation request must not crash the run (and discard every other
             # problem's work). Backfill ERR verdicts so this problem still contributes a
             # (conservative) 0/n and the eval completes + writes results.
+            miss = args.n - len(verdicts)
             print(f"  [WARN] generation failed {lang}|loj-{pid}: {type(e).__name__}: {e}; "
-                  f"recording {args.n - len(verdicts)} ERR verdict(s)", flush=True)
-            verdicts += ["ERR"] * (args.n - len(verdicts))
+                  f"recording {miss} ERR verdict(s)", flush=True)
+            verdicts += ["ERR"] * miss
+            texts += [""] * miss
         n_ac = sum(v == "AC" for v in verdicts)
+        # P0-3: per-sample completion text for offline quality review (kept out of the
+        # main results json to keep it light; streamed to the _samples JSONL below).
+        samples = ([{"sample_k": i, "verdict": verdicts[i], "n_chars": len(texts[i]),
+                     "completion": texts[i]} for i in range(len(verdicts))]
+                   if args.save_completions else None)
         return {"id": pid, "language": lang, "difficulty": DIFF_BY_ID[pid],
-                "n": len(verdicts), "n_ac": n_ac, "verdicts": verdicts}
+                "n": len(verdicts), "n_ac": n_ac, "verdicts": verdicts, "_samples": samples}
 
+    samples_path = ROOT / f"sdpo_passk_{args.tag}_samples.jsonl" if args.save_completions else None
+    if samples_path and samples_path.exists():
+        samples_path.unlink()  # fresh file per run (don't mix reruns of the same tag)
     results = []
     with ThreadPoolExecutor(max_workers=args.concurrency) as ex:
         futs = [ex.submit(one, t) for t in tasks]
         for f in as_completed(futs):
             r = f.result()
+            smp = r.pop("_samples", None)
+            if samples_path and smp:
+                with open(samples_path, "a") as sf:  # stream per problem (crash-safe)
+                    for s in smp:
+                        sf.write(json.dumps({"id": r["id"], "language": r["language"],
+                                             "difficulty": r["difficulty"], **s},
+                                            ensure_ascii=False) + "\n")
             results.append(r)
             print(f"  [{r['language']:<6}|{r['difficulty']:<6}] loj-{r['id']}: "
                   f"{r['n_ac']}/{r['n']} AC", flush=True)

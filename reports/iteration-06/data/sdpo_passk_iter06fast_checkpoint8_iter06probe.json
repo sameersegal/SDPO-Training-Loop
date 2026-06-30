@@ -1,0 +1,247 @@
+{
+  "summary": {
+    "tag": "iter06fast_checkpoint8_iter06probe",
+    "served_model": "sdpo",
+    "n_samples": 8,
+    "temperature": 0.8,
+    "max_tokens": 32768,
+    "by_language": {
+      "python": {
+        "overall": {
+          "n_problems": 12,
+          "pass@1": 0.5104,
+          "pass@2": 0.5714,
+          "pass@4": 0.5833,
+          "pass@8": 0.5833
+        },
+        "easy": {
+          "n_problems": 4,
+          "pass@1": 0.9062,
+          "pass@2": 0.9911,
+          "pass@4": 1.0,
+          "pass@8": 1.0
+        },
+        "medium": {
+          "n_problems": 8,
+          "pass@1": 0.3125,
+          "pass@2": 0.3616,
+          "pass@4": 0.375,
+          "pass@8": 0.375
+        }
+      }
+    },
+    "overall": {
+      "n_problems": 12,
+      "pass@1": 0.5104,
+      "pass@2": 0.5714,
+      "pass@4": 0.5833,
+      "pass@8": 0.5833
+    }
+  },
+  "results": [
+    {
+      "id": 2420,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 8,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2423,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 8,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2602,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 7,
+      "verdicts": [
+        "AC",
+        "RE",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 4001,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 6,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "WA",
+        "AC",
+        "AC",
+        "AC",
+        "WA"
+      ]
+    },
+    {
+      "id": 2132,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 5,
+      "verdicts": [
+        "AC",
+        "WA",
+        "WA",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "WA"
+      ]
+    },
+    {
+      "id": 2297,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA"
+      ]
+    },
+    {
+      "id": 2361,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 7,
+      "verdicts": [
+        "AC",
+        "RE",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2415,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "RE",
+        "RE",
+        "WA",
+        "RE",
+        "RE",
+        "WA",
+        "RE",
+        "WA"
+      ]
+    },
+    {
+      "id": 2594,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 8,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2595,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "TLE",
+        "WA",
+        "WA"
+      ]
+    },
+    {
+      "id": 3387,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "TLE",
+        "TLE",
+        "WA",
+        "TLE",
+        "WA",
+        "WA",
+        "TLE",
+        "TLE"
+      ]
+    },
+    {
+      "id": 3896,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA"
+      ]
+    }
+  ]
+}

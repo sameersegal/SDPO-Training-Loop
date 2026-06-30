@@ -1,0 +1,247 @@
+{
+  "summary": {
+    "tag": "base_iter06probe",
+    "served_model": "Qwen/Qwen3-8B",
+    "n_samples": 8,
+    "temperature": 0.8,
+    "max_tokens": 32768,
+    "by_language": {
+      "python": {
+        "overall": {
+          "n_problems": 12,
+          "pass@1": 0.5312,
+          "pass@2": 0.622,
+          "pass@4": 0.6893,
+          "pass@8": 0.75
+        },
+        "easy": {
+          "n_problems": 4,
+          "pass@1": 0.9062,
+          "pass@2": 0.9911,
+          "pass@4": 1.0,
+          "pass@8": 1.0
+        },
+        "medium": {
+          "n_problems": 8,
+          "pass@1": 0.3438,
+          "pass@2": 0.4375,
+          "pass@4": 0.5339,
+          "pass@8": 0.625
+        }
+      }
+    },
+    "overall": {
+      "n_problems": 12,
+      "pass@1": 0.5312,
+      "pass@2": 0.622,
+      "pass@4": 0.6893,
+      "pass@8": 0.75
+    }
+  },
+  "results": [
+    {
+      "id": 2420,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 8,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2423,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 6,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "WA",
+        "WA",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2602,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 8,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 4001,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 7,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "RE"
+      ]
+    },
+    {
+      "id": 2132,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 4,
+      "verdicts": [
+        "WA",
+        "AC",
+        "AC",
+        "RE",
+        "WA",
+        "AC",
+        "AC",
+        "WA"
+      ]
+    },
+    {
+      "id": 2297,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "WA",
+        "TLE",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA"
+      ]
+    },
+    {
+      "id": 2361,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 7,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "WA",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2415,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 2,
+      "verdicts": [
+        "WA",
+        "AC",
+        "WA",
+        "AC",
+        "RE",
+        "WA",
+        "WA",
+        "WA"
+      ]
+    },
+    {
+      "id": 2594,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 8,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2595,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA"
+      ]
+    },
+    {
+      "id": 3387,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "TLE",
+        "WA",
+        "WA",
+        "TLE",
+        "WA",
+        "WA",
+        "WA",
+        "TLE"
+      ]
+    },
+    {
+      "id": 3896,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 1,
+      "verdicts": [
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "AC",
+        "WA"
+      ]
+    }
+  ]
+}

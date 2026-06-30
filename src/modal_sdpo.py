@@ -169,7 +169,10 @@ def train(args: list[str], num_gpus: int = 1, ojb_splits: str = "ojb_splits_full
             "sdpo_train.py", *args,
         ]
     else:
-        cmd = [sys.executable, "sdpo_train.py", *args]
+        # -u = unbuffered stdout/stderr. Without it, sdpo_train's output is block-buffered
+        # as a Modal subprocess, so a ~15-min step emits NO flushed line and the no-progress
+        # watchdog FALSE-fires on a healthy run (this killed iter-06's first fast-run step 0).
+        cmd = [sys.executable, "-u", "sdpo_train.py", *args]
     print(f"[modal] num_gpus={num_gpus} running:", " ".join(cmd), flush=True)
 
     # Commit the outputs volume periodically so per-20-step checkpoints become
@@ -196,11 +199,16 @@ def train(args: list[str], num_gpus: int = 1, ojb_splits: str = "ojb_splits_full
     # whole process group. (Earlier bug: matched "/100" but the bar is "/N" — never flipped,
     # so the startup grace expired mid-run and FALSE-fired on a healthy run.)
     import signal
-    STALL = int(os.environ.get("WATCHDOG_STALL_SECS", "1200"))   # 20 min of TOTAL silence
+    # 40 min of TOTAL silence. A real step is ~15 min (8B/20k on H200); with `-u` it streams,
+    # but generation can be silent within a step, so the threshold must clear a slow step with
+    # margin. 1200s (20 min) FALSE-fired on iter-06's first fast run (a ~15-min step at the 20k
+    # cap crossed it). A genuine hang still trips 40 min.
+    STALL = int(os.environ.get("WATCHDOG_STALL_SECS", "2400"))
     last = [time.time()]
     killed_by_watchdog = [False]
 
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            env={**os.environ, "PYTHONUNBUFFERED": "1"},
                             text=True, bufsize=1, start_new_session=True)
 
     def _reader():
@@ -261,18 +269,31 @@ def main(
     distillation_weight: float = 0.1,  # hybrid: loss=(1-w)*GRPO + w*SDPO (verifier-dominant)
     teacher_kind: str = "base",       # fixed/initial teacher (iteration-05 T0)
     lr: float = 1e-4,
+    # iteration-06 anti-collapse levers (defaults = sdpo_train defaults = iter-05 behavior;
+    # iter-06 invokes with --beta 0.04 --lr-scheduler cosine --warmup-ratio 0.1 --lr 3e-5).
+    beta: float = 0.0,                # KL anchor to base (0 = off, as iter-05)
+    lr_scheduler: str = "linear",     # iter-06: cosine
+    warmup_ratio: float = 0.0,        # iter-06: 0.1
+    temperature: float = 1.0,         # rollout sampling temperature
+    top_p: float = 0.95,              # rollout nucleus top_p (held = iter-05)
     reward_mode: str = "fraction",
     grpo_reward: str = "binary",       # iteration-05: GRPO advantage = binary AC; SDPO gating = fraction
     sdpo_threshold: float = 0.5,       # near-miss rollouts (>=50% cases) can be SDPO teachers
     system: str = "cp_method",
     save_steps: int = 5,              # eval at 5/10/15/20
+    output_dir: str = "sdpo_out",     # under the sdpo-outputs volume; per-iteration subdir
+                                      # (e.g. sdpo_out/iter06-fast) isolates a run from leftovers
     ojb_splits: str = "ojb_splits.json",  # iteration-05 88-pool (train=easy+medium, heldout has hard)
     resume: bool = False,
 ):
     num_gpus = int(gpu.split(":")[1]) if ":" in gpu else 1
     common = ["--model", model, "--system", system, "--reward-mode", reward_mode,
               "--grpo-reward", grpo_reward, "--sdpo-threshold", str(sdpo_threshold),
-              "--distillation-weight", str(distillation_weight), "--teacher-kind", teacher_kind]
+              "--distillation-weight", str(distillation_weight), "--teacher-kind", teacher_kind,
+              # iter-06 anti-collapse + sampling knobs (apply to smoke + real)
+              "--beta", str(beta), "--lr-scheduler", lr_scheduler,
+              "--warmup-ratio", str(warmup_ratio),
+              "--temperature", str(temperature), "--top-p", str(top_p)]
     if smoke:
         # Smoke validates the REAL path (Qwen3 LoRA attach + critic fires + dense reward +
         # checkpoint write), just tiny. --save-steps 1 exercises the volume-commit path.
@@ -289,7 +310,7 @@ def main(
             "--per-device-batch", str(per_device_batch),
             "--lr", str(lr),
             "--save-steps", str(save_steps),
-            "--output-dir", "sdpo_out",
+            "--output-dir", output_dir,
             *common,
         ]
         if not grad_checkpointing:
@@ -304,6 +325,8 @@ def main(
         args.append("--feedback")
     print(f"[modal] gpu={gpu} model={model} critic={critic} distill_w={distillation_weight} "
           f"teacher={teacher_kind} system={system} save_steps={save_steps} splits={ojb_splits}\n"
+          f"        anti-collapse: lr={lr} beta={beta} sched={lr_scheduler} warmup={warmup_ratio} "
+          f"temp={temperature} top_p={top_p} langs={languages}\n"
           f"        args={args}")
     train.with_options(gpu=gpu).remote(args, num_gpus=num_gpus, ojb_splits=ojb_splits)
 
@@ -473,8 +496,10 @@ def eval_checkpoint(checkpoint: str = "checkpoint-20", languages: str = "python"
     """
     import json
     adapter = f"/root/app/sdpo_out/{checkpoint}"
+    # tag becomes a filename (sdpo_passk_<tag>.json) — strip path separators or the write
+    # fails (a checkpoint like "iter06-fast/checkpoint-8" otherwise yields a slash in the tag).
     base_tag = "base" + tag_suffix
-    sdpo_tag = checkpoint.replace("-", "") + tag_suffix
+    sdpo_tag = checkpoint.replace("-", "").replace("/", "_") + tag_suffix
     print(f"[modal] eval base vs {checkpoint} ({adapter}) on {ojb_splits}, "
           f"langs={languages}, limit={limit or 'full'}, ids={'custom('+str(len(ids.split(',')))+')' if ids else 'split'}")
     p = passk_one.with_options(gpu=gpu)

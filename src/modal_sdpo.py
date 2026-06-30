@@ -108,7 +108,8 @@ VOLUMES = {
     ],
     timeout=10 * 60 * 60,  # dense reward + feedback on the full 206-pool is slower per step
 )
-def train(args: list[str], num_gpus: int = 1, ojb_splits: str = "ojb_splits_full.json"):
+def train(args: list[str], num_gpus: int = 1, ojb_splits: str = "ojb_splits_full.json",
+          watchdog_stall_secs: int = 2400):
     import os
     import signal
     import subprocess
@@ -205,7 +206,10 @@ def train(args: list[str], num_gpus: int = 1, ojb_splits: str = "ojb_splits_full
     # but generation can be silent within a step, so the threshold must clear a slow step with
     # margin. 1200s (20 min) FALSE-fired on iter-06's first fast run (a ~15-min step at the 20k
     # cap crossed it). A genuine hang still trips 40 min.
-    STALL = int(os.environ.get("WATCHDOG_STALL_SECS", "2400"))
+    # G=16 + 32 per-step critic API calls can make ONE step exceed 40 min (iter-09 pf2 false-fired at
+    # 2400s mid-step-1 on a critic-latency spike, while pf1's ~22-min steps survived). Raise via
+    # --watchdog-stall-secs for the critic+big-batch regime; a genuine hang still trips at the threshold.
+    STALL = int(os.environ.get("WATCHDOG_STALL_SECS", str(watchdog_stall_secs)))
     last = [time.time()]
     killed_by_watchdog = [False]
 
@@ -289,6 +293,7 @@ def main(
                                       # 35 sometimes-solvable pids (non-flat groups -> live policy grad)
     ojb_splits: str = "ojb_splits.json",  # iteration-05 88-pool (train=easy+medium, heldout has hard)
     resume: bool = False,
+    watchdog_stall_secs: int = 2400,  # raise for G=16+critic (steps can exceed 40 min); iter-09 uses 4200
 ):
     num_gpus = int(gpu.split(":")[1]) if ":" in gpu else 1
     common = ["--model", model, "--system", system, "--reward-mode", reward_mode,
@@ -334,7 +339,8 @@ def main(
           f"        anti-collapse: lr={lr} beta={beta} sched={lr_scheduler} warmup={warmup_ratio} "
           f"temp={temperature} top_p={top_p} langs={languages} frontier_band={frontier_band or 'no'}\n"
           f"        args={args}")
-    train.with_options(gpu=gpu).remote(args, num_gpus=num_gpus, ojb_splits=ojb_splits)
+    train.with_options(gpu=gpu).remote(args, num_gpus=num_gpus, ojb_splits=ojb_splits,
+                                       watchdog_stall_secs=watchdog_stall_secs)
 
 
 # ---------------------------------------------------------------------------

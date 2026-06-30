@@ -85,17 +85,39 @@ nothing.
 **This validates the instinct to demand a definitive eval before believing a small-probe trend** — the
 single most important process lesson of the iteration.
 
-## 4. Why no effect — and what it would take to detect one
-- **Power.** ±0.15 CIs on 30 problems can't resolve a true effect smaller than ~0.15 pass@8. A real but
-  modest SDPO gain would be invisible here. Detecting it needs **more problems** (100+), **more samples**
-  (n≥16 for tighter pass@8), or **a more discriminative slice** (problems where base pass@8 is mid-range,
-  not the saturated/hopeless tail that dominates this set).
-- **Dose.** 8 steps on 10 problems is a *tiny* dose of a now-healthy gradient. The mechanism only became
-  alive *at* iter-08; we have not yet run a long, clean, frontier-band trajectory to see if alive-gradient
-  + more steps compounds into a measurable gain.
-- **Honest standing position:** *we proved how to keep SDPO's policy gradient alive; we have not yet shown
-  it buys capability.* That is the open question iter-09 should target — long run on a powered eval, not
-  another mechanism tweak.
+## 4. Why no effect — under-training is the leading explanation, not eval power
+
+The null is *consistent with* an underpowered eval, but the within-run telemetry points harder at a
+simpler cause: **the policy barely moved.** iter-08 ran a triple-conservative anti-collapse recipe and it
+worked too well — at *not updating the model*:
+
+| step | LR | grad_norm | flat_grp | rew_std |
+|---|---|---|---|---|
+| 1 | 0 (warmup) | 0.020 | 0.5 | 0.51 |
+| 2 | **3.0e-5** | 0.022 | 0 | 0.50 |
+| 4 | 2.4e-5 | 0.024 | 0 | 0.52 |
+| 6 | 1.2e-5 | 0.032 | 0.5 | 0.40 |
+| 8 | **1.5e-6** | 0.030 | 0 | 0.52 |
+
+- **Under-training (leading).** Peak LR **3e-5** (cut 3× from the 1e-4 default for collapse-avoidance),
+  **decayed to ~0 (1.5e-6) over just 8 steps**, with **grad_norm pinned at ~0.02–0.03** throughout and an
+  effective batch of only **2 groups/step**. The LR×steps integral is minuscule — a policy this lightly
+  nudged *cannot* be expected to show a pass@8 change. Critically, the **frontier band already prevents
+  collapse via the data** (that is what the mechanism win means), so the additional LR throttle on top was
+  redundant and starved the update. `rew_std≈0.5` every step confirms the groups *are* split (there is a
+  teacher–student gap to distill) — we simply applied almost no gradient to it. **Direct, serve-free
+  confirmation:** the functional weight perturbation `||ΔW||_F = ||(α/r)·B·A||_F` (summed over all 252
+  LoRA layers) is **0.46 for iter-08 ckpt-8 vs 2.62 for iter-05 ckpt-20** — the run that moved the model
+  enough to *collapse* it. iter-08 moved the weights **~5.7× less (≈2.3× less per step)**: the evaluated
+  model had barely left base. The null is what an unmoved policy *predicts*.
+- **Eval power (secondary).** ±0.15 CIs on 30 problems also can't resolve a true effect <~0.15. But this
+  is the *second*-order issue: running a bigger eval on a model that didn't move just tightens the CI
+  around zero. Fix the dose first, then power the eval (100+ problems, n≥16, a mid-range/discriminative
+  slice — not the saturated/hopeless tail that dominates this set).
+- **Honest standing position:** *we proved how to keep SDPO's policy gradient alive; we have not yet
+  applied enough of it to move the model, so we have not yet tested whether it buys capability.* iter-09
+  targets the dose (un-throttled LR + flatter schedule + more steps + bigger batch, collapse canary on),
+  **then** a powered eval — see [`reports/iteration-09/PLAN.md`](../iteration-09/PLAN.md).
 
 ## 5. Provenance
 - Re-probe W&B/app: `probe_solve_rate --ids <63 easy+med py> --n 12 --temperature 1.0` → app

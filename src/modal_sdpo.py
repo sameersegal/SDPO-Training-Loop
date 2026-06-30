@@ -35,7 +35,8 @@ DATA = REPO / "data"
 _CODE = ["_paths.py", "ojbench_eval.py", "sdpo_ojbench.py", "sdpo_train.py",
          "sdpo_feedback.py", "sdpo_passk.py", "sdpo_eval_vllm.py", "eval_runner.py",
          "gen_rollouts.py", "sdpo_critic.py", "sdpo_prompts.py", "teacher_eval.py"]
-_DATA = ["ojb_splits.json", "ojb_splits_full.json", "ojbench_selected.json"]
+_DATA = ["ojb_splits.json", "ojb_splits_full.json", "ojbench_selected.json",
+         "frontier_band.json"]  # iteration-07: train on the 35 sometimes-solvable pids
 
 # CUDA *devel* base: flashinfer JIT-compiles kernels at runtime and needs nvcc.
 # Versions pinned to match the validated GB10 venv exactly.
@@ -283,6 +284,8 @@ def main(
     save_steps: int = 5,              # eval at 5/10/15/20
     output_dir: str = "sdpo_out",     # under the sdpo-outputs volume; per-iteration subdir
                                       # (e.g. sdpo_out/iter06-fast) isolates a run from leftovers
+    frontier_band: str = "",          # iteration-07: e.g. "frontier_band.json" -> train ONLY on the
+                                      # 35 sometimes-solvable pids (non-flat groups -> live policy grad)
     ojb_splits: str = "ojb_splits.json",  # iteration-05 88-pool (train=easy+medium, heldout has hard)
     resume: bool = False,
 ):
@@ -315,6 +318,8 @@ def main(
         ]
         if not grad_checkpointing:
             args.append("--no-grad-checkpointing")
+        if frontier_band:
+            args += ["--frontier-band", frontier_band]  # flat /root/app path, e.g. frontier_band.json
         if resume:
             args.append("--resume")
     if critic:
@@ -326,7 +331,7 @@ def main(
     print(f"[modal] gpu={gpu} model={model} critic={critic} distill_w={distillation_weight} "
           f"teacher={teacher_kind} system={system} save_steps={save_steps} splits={ojb_splits}\n"
           f"        anti-collapse: lr={lr} beta={beta} sched={lr_scheduler} warmup={warmup_ratio} "
-          f"temp={temperature} top_p={top_p} langs={languages}\n"
+          f"temp={temperature} top_p={top_p} langs={languages} frontier_band={frontier_band or 'no'}\n"
           f"        args={args}")
     train.with_options(gpu=gpu).remote(args, num_gpus=num_gpus, ojb_splits=ojb_splits)
 

@@ -52,6 +52,40 @@ Flags: `--model` (default `Qwen/Qwen3-8B`), `--languages`, `--n`, `--max-tokens`
 (8k → NO_CODE). Writes `sdpo_passk_<tag>.json` locally + to the `sdpo-outputs` volume. Plot with
 `ITER=<iter> python src/plot_opportunity.py --passk <json> --label "<model>"`.
 
+### Definitive cross-iteration eval (`eval_iterations`)
+The matched, low-noise pass@k: base + a list of checkpoints on the **same** problem ids, all in
+parallel, n>k so pass@k is *graded* (not binary-per-problem). This is the eval that settles a
+small-probe trend — **don't trust a <~25-problem probe for any capability claim** (iter-06/07/08's
+"collapse→fix" arc was 12-probe noise that vanished here; `reports/iteration-08/REPORT.md` §3.5).
+```bash
+.venv/bin/modal run src/modal_sdpo.py::eval_iterations \
+  --ids "<comma pids>" --checkpoints "iteration-05/checkpoint-20,iter06-fast/checkpoint-8,..." \
+  --n 12 --max-tokens 32768 --max-seqs 96
+python src/iters30_analysis.py   # bootstrap 95% CI + figure
+```
+Flags: `--ids`, `--checkpoints` (comma volume paths), `--n`, `--temperature`, `--max-tokens`,
+`--max-seqs`, `--gpu`. Each model spawns its own H200.
+
+### Eval efficiency knobs (apply by default)
+- **`--max-seqs` (default 96, was 48).** The iters30 eval ran KV cache only ~25–46% at 48 seqs on
+  the H200 — under-utilized. 96 ~doubles in-flight requests + wall-clock throughput; the client
+  `--concurrency` auto-matches `max_seqs` so the continuous batch stays full. **Watch KV-cache % stays
+  under the 0.85 budget** (drop `max_seqs` if it pins/OOMs). Time > money: saturate the box.
+- **`--max-tokens` (≥16k).** The 32k thinking tail dominates wall-clock (~9 min/seq). 32k is the safe
+  default (Qwen3 think-ON NO_CODEs below ~16k); **20–24k trades a little headroom for a much shorter
+  tail** when speed matters more than the last few hard problems.
+- **Decouple generate (GPU) from judge (CPU).** Judging is pure CPU (stdout-diff / `g++`); running it
+  on the H200 idles a $/s GPU. Generate on the cloud with **`sdpo_passk.py --no-judge`** (streams every
+  completion to `sdpo_passk_<tag>_samples.jsonl`, skips judging + aggregation), pull that small JSONL,
+  and judge **locally on the GB10 for free**:
+  ```bash
+  # cloud (GPU only generates):  sdpo_passk.py ... --no-judge --tag <tag>
+  .venv/bin/modal volume get sdpo-outputs /<iter>/sdpo_passk_<tag>_samples.jsonl ./
+  python src/judge_local.py --tag <tag> --workers 8   # writes the canonical sdpo_passk_<tag>.json
+  ```
+  `judge_local.py` produces the identical `sdpo_passk_<tag>.json` schema, so `iters30_analysis.py` /
+  `generate_slides.py` consume it unchanged. Needs `ojbench_data/` present locally (re-fetchable).
+
 ## Get the trained adapter back
 
 ```bash

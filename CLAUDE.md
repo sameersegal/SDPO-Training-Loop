@@ -202,6 +202,17 @@ The escalation ladder, cheapest first: **unit tests** (`pytest tests/`, seconds,
   a little more on bigger/more concurrent hardware to finish sooner beats a cheap job that idles for
   hours. Pick the parameters that *saturate* the box (watch KV stays under the `gpu_memory_utilization`
   budget so you don't OOM), and re-check utilization in the first few steps after relaunch.
+- **Eval defaults (baked in after iter-08): `--max-seqs 96` (not 48 — KV was still only ~25–46% on the
+  H200), client `--concurrency` auto-matches it, and `--max-tokens ≥16k` (32k is safe but the 32k think
+  tail dominates wall-clock; 20–24k is the speed/headroom trade).** And **judge OFF the GPU**: judging is
+  pure CPU, so running it on the H200 idles a $/s card. Generate cloud-side with `sdpo_passk.py
+  --no-judge` (streams completions to `sdpo_passk_<tag>_samples.jsonl`), pull that small JSONL, judge
+  locally on the GB10 with `src/judge_local.py --tag <tag>` (same `sdpo_passk_<tag>.json` schema, free).
+- **Never trust a <~25-problem pass@k probe for a capability claim.** A 12-problem × n=8 probe has ±0.15
+  noise — enough to fabricate a "monotonic trend" from nothing (iter-06/07/08's "collapse→fix" arc was
+  noise; it vanished on the 30-problem n=12 bootstrap-CI `eval_iterations`). Gate every capability claim
+  on a CI that excludes zero; the per-step `flat_group` mechanism metric is trustworthy, the small-probe
+  pass@k is not.
 
 ## Long-running runs MUST survive restarts & network drops
 Training and eval runs take hours; they must outlive a dropped session, a network blip, or a

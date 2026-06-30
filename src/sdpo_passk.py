@@ -66,11 +66,17 @@ def main():
                     help="system prompt for eval (match training: iteration-03 used cp_method)")
     ap.add_argument("--base-url", default="http://localhost:8000/v1")
     ap.add_argument("--wandb", action="store_true")
+    ap.add_argument("--no-judge", action="store_true",
+                    help="generate-only: skip judging (verdict=SKIP), always save the samples "
+                         "JSONL, skip pass@k aggregation/W&B. Judge OFFLINE with src/judge_local.py "
+                         "(keeps the cloud GPU doing generation, not idle CPU judging).")
     ap.add_argument("--no-save-completions", dest="save_completions", action="store_false",
                     help="disable per-sample completion capture (default ON -> "
                          "sdpo_passk_<tag>_samples.jsonl: text+verdict+length per sample)")
     ap.set_defaults(save_completions=True)
     args = ap.parse_args()
+    if args.no_judge:
+        args.save_completions = True  # the samples JSONL is the ONLY output offline judging reads
     import sdpo_ojbench as _S
     SYSTEM = _S.SYSTEM_PROMPTS[args.system]
     ks = [int(x) for x in args.ks.split(",")]
@@ -107,6 +113,8 @@ def main():
     def _safe_judge(text, pid, lang):
         # A single completion's judge must never sink the whole eval — record ERR
         # (counts as non-AC) instead of raising (the buffer-all anti-pattern).
+        if args.no_judge:
+            return "SKIP"  # offline: judge_local.py recomputes verdicts from the samples JSONL
         try:
             return _judge(text, pid, lang)
         except Exception as e:
@@ -169,6 +177,14 @@ def main():
             results.append(r)
             print(f"  [{r['language']:<6}|{r['difficulty']:<6}] loj-{r['id']}: "
                   f"{r['n_ac']}/{r['n']} AC", flush=True)
+
+    if args.no_judge:
+        # Generation-only: verdicts are SKIP, pass@k is meaningless. The samples JSONL holds
+        # every completion; judge it offline (e.g. on the GB10) with src/judge_local.py.
+        print(f"\n[no-judge] generation done: {len(results)} problems x n={args.n} -> "
+              f"{samples_path}", flush=True)
+        print(f"[no-judge] judge offline:  python src/judge_local.py --tag {args.tag}", flush=True)
+        return
 
     # aggregate: mean pass@k over problems, by language x difficulty and overall
     difficulties = ["easy", "medium", "hard"]

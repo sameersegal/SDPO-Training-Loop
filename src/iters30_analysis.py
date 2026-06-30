@@ -66,10 +66,13 @@ def main():
     ax.errorbar(x, points, yerr=yerr, fmt="none", ecolor="black", capsize=5, lw=1.5)
     for i, p in enumerate(points):
         ax.text(i, his[i] + 0.015, f"{p:.2f}", ha="center", fontsize=10, fontweight="bold")
+    if points:
+        ax.axhline(points[0], ls="--", color="slategray", alpha=0.6, lw=1)  # base reference
     ax.set_xticks(list(x)); ax.set_xticklabels(labels, fontsize=9)
     ax.set_ylabel("train==eval pass@8  (30 problems, n=12)"); ax.set_ylim(0, 1.02)
-    ax.set_title("Definitive pass@8 across iterations (95% bootstrap CI)\n"
-                 "collapse → attenuate → revive policy gradient", fontweight="bold")
+    ax.set_title("Definitive pass@8 (95% bootstrap CI): all CIs OVERLAP base & each other\n"
+                 "no iteration is statistically distinguishable — the 12-probe trend was noise",
+                 fontweight="bold", fontsize=11)
     ax.grid(axis="y", alpha=0.3)
     os.makedirs("reports/iteration-08/figures", exist_ok=True)
     out = "reports/iteration-08/figures/iters30_passk_definitive.png"

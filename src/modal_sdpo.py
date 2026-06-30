@@ -419,7 +419,8 @@ def passk_one(which: str, languages: str = "python",
               adapter: str = "/root/app/sdpo_out", ojb_splits: str = "ojb_splits.json",
               tag: str = "", model: str = "Qwen/Qwen3-8B",
               max_model_len: int = 40960, max_tokens: int = 32768, limit: int = 0,
-              ids: str = "", n: int = 8, temperature: float = 0.8):
+              ids: str = "", n: int = 8, temperature: float = 0.8,
+              max_seqs: int = 96, concurrency: int = 0):
     """pass@k only (returns as soon as it finishes — no slow held-out/gsm8k tail).
 
     adapter: LoRA dir to serve when which=='sdpo' (e.g. .../sdpo_out/checkpoint-20).
@@ -442,9 +443,11 @@ def passk_one(which: str, languages: str = "python",
     base = model
     serve = ["vllm", "serve", base, "--port", "8000", "--dtype", "bfloat16",
              "--max-model-len", str(max_model_len), "--gpu-memory-utilization", "0.85",
-             "--max-num-seqs", "48", "--enforce-eager"]  # eager: dodge the kernel-4.19 gen hang
-    # 48-way: held-out logs showed KV cache only 6-18% at 16 seqs on H200 — badly
-    # underutilized; 48 stays well under the 0.85 budget and ~3x's wall-clock throughput.
+             "--max-num-seqs", str(max_seqs), "--enforce-eager"]  # eager: dodge the kernel-4.19 hang
+    # max_seqs: the iters30 eval still ran KV cache only ~25-46% at 48 seqs on H200 — H200
+    # has more headroom. 96 (the new default) ~doubles in-flight requests and wall-clock
+    # throughput; watch KV stays under the 0.85 budget (drop if it pins). Client --concurrency
+    # below matches max_seqs so the server's continuous batch is actually kept full.
     if which == "sdpo":
         serve += ["--enable-lora", "--lora-modules", f"sdpo={adapter}",
                   "--max-lora-rank", "32"]
@@ -465,7 +468,8 @@ def passk_one(which: str, languages: str = "python",
         _cmd = ["python", "sdpo_passk.py", "--served-model", served,
                 "--tag", tag, "--n", str(n), "--ks", "1,2,4,8",
                 "--max-tokens", str(max_tokens), "--temperature", str(temperature),
-                "--languages", languages, "--concurrency", "48", "--wandb"]
+                "--languages", languages,
+                "--concurrency", str(concurrency or max_seqs), "--wandb"]
         if limit:
             _cmd += ["--limit", str(limit)]
         if ids:
@@ -513,19 +517,24 @@ def probe_solve_rate(ids: str = "", languages: str = "python", n: int = 12,
 @app.local_entrypoint()
 def eval_iterations(ids: str = "", checkpoints: str = "", n: int = 12, temperature: float = 0.8,
                     languages: str = "python", tag_prefix: str = "iters30", gpu: str = "H200",
-                    model: str = "Qwen/Qwen3-8B"):
+                    model: str = "Qwen/Qwen3-8B", max_tokens: int = 32768, max_seqs: int = 96):
     """iteration-08 DEFINITIVE eval: base + a list of checkpoints on the SAME ids (matched
     cross-iteration pass@k), all in PARALLEL. checkpoints = comma list of volume paths, e.g.
-    'iteration-05/checkpoint-20,iter06-fast/checkpoint-8'. n>k => pass@k is graded (less noisy)."""
+    'iteration-05/checkpoint-20,iter06-fast/checkpoint-8'. n>k => pass@k is graded (less noisy).
+    max_tokens: keep >=16k (Qwen3 think-ON NO_CODEs lower); 32k is safe but the 32k tail
+    dominates wall-clock — 20-24k trades a little headroom for a much shorter tail. max_seqs:
+    server in-flight cap (also the client concurrency); 96 on H200, lower if KV cache pins."""
     import json
     p = passk_one.with_options(gpu=gpu)
+    kw = dict(model=model, ids=ids, n=n, temperature=temperature,
+              max_tokens=max_tokens, max_seqs=max_seqs)
     calls = [(f"{tag_prefix}_base",
               p.spawn("base", languages, "/root/app/sdpo_out", "ojb_splits.json",
-                      f"{tag_prefix}_base", model=model, ids=ids, n=n, temperature=temperature))]
+                      f"{tag_prefix}_base", **kw))]
     for ck in [c.strip() for c in checkpoints.split(",") if c.strip()]:
         tag = f"{tag_prefix}_" + ck.replace("-", "").replace("/", "_")
         calls.append((tag, p.spawn("sdpo", languages, f"/root/app/sdpo_out/{ck}", "ojb_splits.json",
-                                   tag, model=model, ids=ids, n=n, temperature=temperature)))
+                                   tag, **kw)))
     for tag, c in calls:
         try:
             res = c.get()

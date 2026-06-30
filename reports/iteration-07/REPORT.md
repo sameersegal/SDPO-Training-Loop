@@ -1,11 +1,17 @@
 # Iteration-07 — revive the dead policy gradient via the frontier band
 
-> **Status: DONE — the fix worked (2026-06-30).** 8-step Qwen3-8B on Modal H200 (W&B `444ze6k1`),
-> 8 checkpoints. **Headline: pass@8 regression REVERSED** — `flat_group 0.75→0.44` (revived policy
-> gradient) → **train==eval pass@8 +0.083 (0.667→0.750)**, the first iteration to beat base
-> (iter-05 −0.33, iter-06 −0.167, iter-07 **+0.083**). Caveat: small noisy 12-probe (base varies ±0.15
-> across runs) — trust the within-run Δ + monotonic ckpt trend (0.50→0.58→0.75), confirm magnitude on a
-> larger probe. **One change from iter-06:** train on the **35 sometimes-solvable** problems
+> **⚠️ CORRECTION (2026-07-01): the "+0.083 win" was 12-probe noise and is RETRACTED.** The iter-08
+> definitive eval (30 problems, n=12, bootstrap 95% CI) measured **iter-07 pass@8 = 0.60 [0.43,0.77] vs
+> base 0.73 [0.56,0.87]** — overlapping CIs, and iter-07 is in fact the *lowest* point estimate of all
+> iterations. There is **no statistically significant pass@8 gain.** The mechanism below (`flat_group`
+> 0.75→0.44, revived policy gradient) is **real and stands**; the *capability* headline does not. Read
+> the rest of this report as the mechanism result + a now-known-noisy probe. See
+> [`reports/iteration-08/REPORT.md`](../iteration-08/REPORT.md) §3.5.
+>
+> **Status: mechanism validated; outcome null (orig. 2026-06-30).** 8-step Qwen3-8B on Modal H200 (W&B
+> `444ze6k1`), 8 checkpoints. `flat_group 0.75→0.44` revived the policy gradient (the durable result).
+> The original 12-probe read **pass@8 0.667→0.750** but did **not** replicate on the powered eval.
+> **One change from iter-06:** train on the **35 sometimes-solvable** problems
 > (`--frontier-band frontier_band.json`) instead of the whole easy+medium pool — so groups have
 > within-group reward variance and the GRPO policy gradient revives. Design SoT:
 > [`docs/EXPERIMENT.md`](../../docs/EXPERIMENT.md). Prior: iter-05 collapsed (pass@8 0.83→0.50),

@@ -141,3 +141,45 @@ saved** for the same (arguably cleaner) conclusion.
    first.
 5. **Small watched runs, kill early.** The signal that matters usually arrives in the first few
    steps; pay for length only once the mechanism is alive.
+
+---
+
+## Addendum — corrections after iteration-08
+
+This retrospective was written after iter-07. iter-08 refines three of its claims:
+
+1. **The fix is frontier band + BINARY reward, not "frontier band + dense reward."** iter-07/08 ran
+   `--grpo-reward binary`. The lever is **data selection** (which problems split under the binary
+   advantage). *Dense reward is a separate, gaming-prone alternative* (it harvests partial-solvers'
+   variance) — it is **not** what reversed the collapse. Wherever this doc pairs "frontier band + dense
+   reward," read "frontier band (+ binary reward)."
+2. **"iter-03 would have nailed it in one step" overstates it — the band-selection *metric* was a real,
+   later discovery.** iter-07's band (selected by the *dense* score from a coarse **n=4** probe) was
+   **69% flat under the binary advantage** → `flat_group` only fell to **0.44** and pass@8 gained a
+   noisy **+0.083**. iter-08 showed the band must be selected by **binary solve rate at the training
+   temperature**: an **n=12, temp-1.0** re-probe of the 63 easy+med problems found only **10** true
+   binary-frontier (`p∈[0.25,0.75]`) — training on them drove `flat_group` to **0.12**. So the iter-03
+   plan as designed (dense reward + coarse frontier) would most plausibly have produced an *iter-07-like
+   partial* result, not the clean fix. **Trend now: `flat_group` 0.75 → 0.44 → 0.12 across iter-06/07/08.**
+3. **The +0.083 headline is RETRACTED — the definitive eval found NO effect.** The 30-problem, n=12
+   matched eval (base + iter-05/06/07/08 ckpts, bootstrap 95% CI) came back: **base 0.73, iter-05 0.66,
+   iter-06 0.75, iter-07 0.60, iter-08 0.71 — all CIs (~±0.15) overlap; no iteration is statistically
+   distinguishable from base on pass@8.** The clean "−0.33 → −0.167 → +0.083" monotone in the arc table
+   above (rows iter-05/06/07) was **12-probe noise and did not replicate** — iter-07 is actually the
+   *lowest* point estimate. **What stands: the mechanism** (`flat_group` 0.75 → 0.44 → 0.12 across
+   iter-06/07/08, a direct per-step measurement). **What dies: the capability claim** — reviving the
+   policy gradient did not buy a measurable pass@8 gain at this scale/dose. *Treat every Δ in this
+   document's tables as within-noise unless confirmed on a powered (≥30-problem, n≥12, bootstrap-CI)
+   eval.* `reports/comparison/SPEND.md` **now exists** (the line calling it "never created" is stale).
+   Cost total (~$130–180) predates iter-08 (+~$70: probe/train/definitive-eval).
+
+4. **The biggest avoidable cost was believing small-probe trends.** Tying #2 of the main retrospective
+   together with this null result: the entire "collapse → fix" arc that motivated iterations 06/07/08
+   was visible *only* in a 12-problem probe whose ±0.15 noise could fabricate a ±0.25 swing. A
+   30-problem bootstrap-CI eval — run *once, early* — would have shown the effect was unresolvable and
+   redirected effort from mechanism-chasing to **powering the eval / increasing the dose**. New standing
+   lesson: *never let a small-probe Δ drive an iteration; gate every capability claim on a CI that
+   excludes zero.*
+
+New standing lesson (now in `docs/FINDINGS.md`): *select the frontier band by binary solve rate at the
+training temperature, not a dense/coarse probe — the right metric drives `flat_group`→0.*

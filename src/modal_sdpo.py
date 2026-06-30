@@ -420,7 +420,8 @@ def passk_one(which: str, languages: str = "python",
               tag: str = "", model: str = "Qwen/Qwen3-8B",
               max_model_len: int = 40960, max_tokens: int = 32768, limit: int = 0,
               ids: str = "", n: int = 8, temperature: float = 0.8,
-              max_seqs: int = 96, concurrency: int = 0):
+              max_seqs: int = 96, concurrency: int = 0,
+              eval_dir: str = "evals", judge: bool = True):
     """pass@k only (returns as soon as it finishes — no slow held-out/gsm8k tail).
 
     adapter: LoRA dir to serve when which=='sdpo' (e.g. .../sdpo_out/checkpoint-20).
@@ -429,6 +430,11 @@ def passk_one(which: str, languages: str = "python",
     limit: cap to first N tasks (easy-first); with langs=python, --limit 10 = the 5 easy +
       5 medium held-out problems and SKIPS the 15 hard (flat 0/8, the slow 32k-thinking tail
       that overran the 2h fn timeout). 0 = full 25-problem split.
+    eval_dir: subfolder UNDER the sdpo-outputs volume (/root/app/sdpo_out/<eval_dir>) where ALL
+      artifacts (results json + per-sample completions JSONL) are copied + committed, so nothing
+      dies with the ephemeral container (the lost-_samples.jsonl bug). Pull the whole folder after.
+    judge: when False, run sdpo_passk.py --no-judge (generate-only, stream completions, skip pass@k);
+      judge the persisted samples OFFLINE/local with src/judge_local.py (keeps the GPU generating).
     """
     import json
     import os
@@ -469,7 +475,8 @@ def passk_one(which: str, languages: str = "python",
                 "--tag", tag, "--n", str(n), "--ks", "1,2,4,8",
                 "--max-tokens", str(max_tokens), "--temperature", str(temperature),
                 "--languages", languages,
-                "--concurrency", str(concurrency or max_seqs), "--wandb"]
+                "--concurrency", str(concurrency or max_seqs)]
+        _cmd += ["--no-judge"] if not judge else ["--wandb"]
         if limit:
             _cmd += ["--limit", str(limit)]
         if ids:
@@ -477,6 +484,24 @@ def passk_one(which: str, languages: str = "python",
         subprocess.run(_cmd, check=True)
     finally:
         srv.terminate()
+    # Persist EVERY artifact (results json when judged + the per-sample completions JSONL) to a
+    # designated folder on the sdpo-outputs volume so nothing dies with the ephemeral container
+    # (the lost-_samples.jsonl bug). Pull the whole folder locally afterward.
+    import glob
+    import shutil
+    dest = f"/root/app/sdpo_out/{eval_dir}"
+    os.makedirs(dest, exist_ok=True)
+    persisted = []
+    for fp in glob.glob(f"sdpo_passk_{tag}.json") + glob.glob(f"sdpo_passk_{tag}_samples.jsonl"):
+        shutil.copy(fp, os.path.join(dest, os.path.basename(fp)))
+        persisted.append(os.path.basename(fp))
+    outputs.commit()
+    hf_cache.commit()  # persist newly-downloaded weights for next run
+    print(f"[passk] persisted {persisted} -> volume sdpo-outputs:/{eval_dir}/", flush=True)
+    # generate-only: no results json — return a marker so callers don't try to read pass@k
+    if not judge:
+        return {"tag": tag, "eval_dir": eval_dir, "judged": False,
+                "samples": f"{eval_dir}/sdpo_passk_{tag}_samples.jsonl"}
     return json.load(open(f"sdpo_passk_{tag}.json"))
 
 
@@ -503,9 +528,11 @@ def probe_solve_rate(ids: str = "", languages: str = "python", n: int = 12,
     import json
     res = passk_one.with_options(gpu=gpu).remote(
         "base", languages, "/root/app/sdpo_out", "ojb_splits.json", tag,
-        model=model, ids=ids, n=n, temperature=temperature)
+        model=model, ids=ids, n=n, temperature=temperature, eval_dir=f"evals/{tag}")
     fname = out or f"sdpo_passk_{tag}.json"
     json.dump(res, open(fname, "w"), indent=2)
+    print(f"[probe] artifacts (json + samples) persisted -> sdpo-outputs:/evals/{tag}/  "
+          f"(pull: .venv/bin/modal volume get sdpo-outputs /evals/{tag} ./)")
     rows = sorted(res["results"], key=lambda r: r["n_ac"] / max(1, r["n"]))
     print(f"[probe] {len(rows)} problems, n={n}, temp={temperature}")
     for r in rows:
@@ -517,17 +544,22 @@ def probe_solve_rate(ids: str = "", languages: str = "python", n: int = 12,
 @app.local_entrypoint()
 def eval_iterations(ids: str = "", checkpoints: str = "", n: int = 12, temperature: float = 0.8,
                     languages: str = "python", tag_prefix: str = "iters30", gpu: str = "H200",
-                    model: str = "Qwen/Qwen3-8B", max_tokens: int = 32768, max_seqs: int = 96):
+                    model: str = "Qwen/Qwen3-8B", max_tokens: int = 32768, max_seqs: int = 96,
+                    judge: bool = True):
     """iteration-08 DEFINITIVE eval: base + a list of checkpoints on the SAME ids (matched
     cross-iteration pass@k), all in PARALLEL. checkpoints = comma list of volume paths, e.g.
     'iteration-05/checkpoint-20,iter06-fast/checkpoint-8'. n>k => pass@k is graded (less noisy).
     max_tokens: keep >=16k (Qwen3 think-ON NO_CODEs lower); 32k is safe but the 32k tail
     dominates wall-clock — 20-24k trades a little headroom for a much shorter tail. max_seqs:
-    server in-flight cap (also the client concurrency); 96 on H200, lower if KV cache pins."""
+    server in-flight cap (also the client concurrency); 96 on H200, lower if KV cache pins.
+    judge=False: lean path — generate on the GPU (no judging), then judge ALL persisted samples
+    locally on the GB10 with src/judge_local.py. ALL artifacts land in (and pull from) ONE folder:
+    sdpo-outputs:/evals/<tag_prefix>/."""
     import json
     p = passk_one.with_options(gpu=gpu)
+    eval_dir = f"evals/{tag_prefix}"
     kw = dict(model=model, ids=ids, n=n, temperature=temperature,
-              max_tokens=max_tokens, max_seqs=max_seqs)
+              max_tokens=max_tokens, max_seqs=max_seqs, eval_dir=eval_dir, judge=judge)
     calls = [(f"{tag_prefix}_base",
               p.spawn("base", languages, "/root/app/sdpo_out", "ojb_splits.json",
                       f"{tag_prefix}_base", **kw))]
@@ -539,11 +571,22 @@ def eval_iterations(ids: str = "", checkpoints: str = "", n: int = 12, temperatu
         try:
             res = c.get()
             json.dump(res, open(f"sdpo_passk_{tag}.json", "w"), indent=2)
-            ov = res["summary"]["overall"]
-            print(f"[eval-iters] {tag}: pass@1={ov.get('pass@1')} pass@8={ov.get('pass@8')} "
-                  f"n_problems={ov.get('n_problems')}")
+            if judge:
+                ov = res["summary"]["overall"]
+                print(f"[eval-iters] {tag}: pass@1={ov.get('pass@1')} pass@8={ov.get('pass@8')} "
+                      f"n_problems={ov.get('n_problems')}")
+            else:
+                print(f"[eval-iters] {tag}: generated (no-judge) -> {res.get('samples')}")
         except Exception as e:  # noqa: BLE001
             print(f"[eval-iters] {tag} FAILED: {e}")
+    # Everything (results json + per-sample completions JSONL) is committed under ONE folder.
+    print(f"\n[eval-iters] all artifacts persisted -> sdpo-outputs:/{eval_dir}/")
+    print(f"[eval-iters] pull the whole folder:  "
+          f".venv/bin/modal volume get sdpo-outputs /{eval_dir} ./")
+    if not judge:
+        print(f"[eval-iters] then judge locally:  for f in {eval_dir.split('/')[-1]}/"
+              f"sdpo_passk_*_samples.jsonl; do python src/judge_local.py "
+              f"--samples \"$f\" --tag \"$(basename $f _samples.jsonl | sed s/sdpo_passk_//)\"; done")
 
 
 @app.local_entrypoint()
@@ -677,11 +720,16 @@ def passk_model_remote(model: str, tag: str, languages: str = "python",
 
     src = f"sdpo_passk_{tag}.json"
     res = json.load(open(src))
-    # durable copy on the volume so a killed client doesn't lose the result
+    # durable copy on the volume so a killed client doesn't lose the result — BOTH the results
+    # json AND the per-sample completions JSONL (don't strand the samples in the container).
+    import glob as _glob
+    import shutil as _shutil
     json.dump(res, open(f"/root/app/sdpo_out/{src}", "w"), indent=2)
+    for fp in _glob.glob(f"sdpo_passk_{tag}_samples.jsonl"):
+        _shutil.copy(fp, f"/root/app/sdpo_out/{fp}")
     outputs.commit()
     hf_cache.commit()  # persist newly-downloaded weights for next run
-    print(f"[passk] wrote {src} (also volume sdpo-outputs:/{src})", flush=True)
+    print(f"[passk] wrote {src} + samples (also volume sdpo-outputs:/{tag}*)", flush=True)
     return res
 
 

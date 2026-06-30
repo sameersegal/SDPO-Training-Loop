@@ -32,24 +32,40 @@ the *dose*, hold the *mechanism* (frontier band + binary reward + critic) fixed.
 Held fixed deliberately: LoRA rank 32 / text-tower targets (capacity is a *separate* future lever — don't
 move it with the dose), `frontier_band_v2`, binary reward, critic on, python-only.
 
-## 3. The key new artifact — a dose–response curve
-A single run yields the disambiguating evidence if we **eval intermediate checkpoints**, not just the
-last one. Save every checkpoint (already mandatory); evaluate ckpt **0/10/20/30** on the powered set:
-- **pass@8 rises monotonically with steps and the CI separates from base** → H1 confirmed, real effect,
-  and we have its dose–response.
-- **pass@8 stays flat across 30 steps on a powered eval, while the model demonstrably moved** (grad_norm
-  up, completions changed) → H2 gains strong support; pivot to *signal quality* (reward/teacher gap per
-  the iter-04 diffuse-advantage red flag, LoRA capacity, or model scale), not more dose.
+## 3. The metric correction — measure pass@1, not pass@8 (pass@8 is saturated here)
+**iter-05→08 measured the wrong quantity.** At n=12, pass@8 saturates: on the 63-problem probe pool it is
+effectively **bimodal — 29 problems at exactly 0, 26 at exactly 1.0, only 4 in between** (because even
+1/12 base successes ⇒ pass@8 = 0.67, and 2/12 ⇒ 0.91). **Every problem in the trained frontier band has
+base pass@8 = 1.0** — so pass@8 *cannot* show improvement there by construction; that is the real reason
+iter-05→08 saw nothing. **pass@1** has resolution 1/n, spreads the problems across 0.08–0.83, and is
+*exactly what SDPO moves* — distilling pass@k success into the policy raises the floor (pass@1) toward the
+ceiling (pass@k). (This does **not** contradict CLAUDE.md's "pass@k, not greedy pass@1": that warns against
+*greedy single-shot* pass@1's ±2/25 batch noise. **Sampled-mean** pass@1 over n≥16 at temp>0 is a stable
+expectation — the on-objective, resolvable metric.)
+
+**Primary metric:** mean **sampled pass@1** (+ the pass@1/2/4/8 curve to show the gap closing), bootstrap
+95% CI. **Dose–response artifact:** evaluate ckpt **0/10/20/30** and read the curve:
+- **pass@1 rises with steps, CI separates from base on the trained band** → H1 confirmed (real effect).
+- **pass@1 flat across 30 steps while the model demonstrably moved** (grad_norm/ΔW up, completions changed)
+  → strong support for H2; pivot to *signal quality* (reward/teacher gap per iter-04's diffuse-advantage
+  red flag, LoRA capacity, model scale), not more dose.
 - **length/entropy collapse by ~step 6** → LR too hot; the canary catches it, back off to 5e-5.
 
-## 4. Powered eval (fix iter-08's second-order problem too)
-- **Bigger, discriminative problem set:** 60–100 problems whose *base* pass@8 is mid-range (~0.3–0.8) —
-  exclude the saturated (always-AC) and hopeless (always-fail) tails that dominated the 30-problem set and
-  added noise without resolving power.
-- **n≥12** (graded pass@8), **bootstrap 95% CI**, matched base + each evaluated checkpoint (`eval_iterations`).
-- **Lean eval path (baked in this iteration):** `--max-seqs 96`, `--max-tokens` 20–24k, and **generate on
-  the H200 (`--no-judge`) + judge locally on the GB10 (`judge_local.py`)** — keep the GPU generating, not
-  idle-judging.
+## 4. The eval set — concrete, discriminative, train + held-out (`data/eval_iter09.json`)
+The discriminative slice is **intrinsically small** (the learnability frontier is narrow): only **18** of
+the 63 probe problems have base pass@1 ∈ (0, 0.85]. Built and committed as `data/eval_iter09.json`:
+- **`train_eval` (10):** the trained frontier band — *did it learn the trained distribution?* (base pass@1
+  0.25–0.75, all pass@8-saturated).
+- **`heldout` (8):** non-trained, same easy+med pool (base pass@1 0.08–0.83) — *did it generalize?*
+- **Power comes from pass@1 resolution + n + bootstrap + the dose–response, NOT problem count.** 18 is the
+  honest ceiling on this pool; pushing to 30+ would need probing far more medium problems (mid-pass@1 ones
+  are rare) — an optional pre-step, not a blocker. Run **n=24** for tight per-problem pass@1.
+- **Bootstrap 95% CI**, matched base + each checkpoint (`eval_iterations` → `iters30_analysis.py`, retargeted
+  to pass@1).
+- **Lean + durable eval path (now baked in):** `--max-seqs 96`, `--max-tokens` 20–24k, **`--no-judge` on
+  the H200 (generate only) + `judge_local.py` on the GB10**, and **every artifact committed to
+  `sdpo-outputs:/evals/<run>/`** (results json + per-sample JSONL) — pull the whole folder; nothing strands
+  in the container (the iter-08 lost-samples bug, now fixed).
 
 ## 5. Guardrails (apply known hazards by default)
 - **Length/entropy canary ON** — flag/kill if `mean_length` or entropy drops sharply by ~step 6 (the
@@ -103,9 +119,31 @@ So: **confident the model will now move; genuinely uncertain whether the move he
 the experiment — instrumented to resolve cheaply (grad_norm/ΔW early, canary by step 6, dose–response on
 intermediate checkpoints) rather than after a full $6–9 run.
 
-## 7. Provenance (to fill on run)
-- Recipe: `modal_sdpo.py::main --frontier-band frontier_band_v2.json --lr 1e-4 --lr-scheduler
-  constant_with_warmup --warmup-ratio 0.1 --num-generations 16 --max-steps 30 --save-steps 1
-  --difficulties easy,medium --languages python` (confirm flag names against `sdpo_train.py`).
-- Eval: `eval_iterations --ids <powered set> --checkpoints iter09-*/checkpoint-{10,20,30} --n 12
-  --max-tokens 24576 --max-seqs 96` → `iters30_analysis.py` (dose–response variant).
+## 7. Provenance (recipe verified against `sdpo_train.py` + `modal_sdpo.main`, 2026-07-01)
+All flags below exist and forward through `main()`. **Train (decoupled launch):**
+```
+setsid nohup .venv/bin/modal run --detach src/modal_sdpo.py::main \
+  --frontier-band frontier_band_v2.json --grpo-reward binary --critic \
+  --lr 1e-4 --lr-scheduler constant_with_warmup --warmup-ratio 0.1 \
+  --num-generations 16 --max-steps 30 --save-steps 5 \
+  --difficulties easy,medium --languages python \
+  --output-dir iter09-dose --max-completion-length 20480 \
+  > runs/iteration-09/train.log 2>&1 < /dev/null &
+```
+(`--save-steps 5` ⇒ ckpts 5/10/…/30; keep ≤ interruption interval for `--resume`. G=16 stays microbatch=1
+so no OOM — it adds grad-accum steps, not peak memory; ~2× slower/step than iter-08, watch cadence.)
+
+**Eval (lean + durable, dose–response):** generate on H200, judge on GB10.
+```
+.venv/bin/modal run src/modal_sdpo.py::eval_iterations --judge False \
+  --ids 3008,2590,2610,2498,2612,2499,2603,2132,2667,2415,4001,2608,2294,3565,2445,2129,2951,3896 \
+  --checkpoints iter09-dose/checkpoint-10,iter09-dose/checkpoint-20,iter09-dose/checkpoint-30 \
+  --n 24 --max-tokens 24576 --max-seqs 96 --tag-prefix iter09dose
+.venv/bin/modal volume get sdpo-outputs /evals/iter09dose ./        # pull the whole folder
+for f in iter09dose/sdpo_passk_*_samples.jsonl; do \
+  python src/judge_local.py --samples "$f" \
+    --tag "$(basename $f _samples.jsonl | sed s/sdpo_passk_//)"; done   # judge free on GB10
+```
+Then `iters30_analysis.py` **retargeted to pass@1** (primary) + the pass@1/2/4/8 curve, split
+`train_eval` vs `heldout` (`data/eval_iter09.json`), with the per-checkpoint ΔW (`src/adapter_delta.py`)
+overlaid as the dose axis. Live monitoring: ΔW + grad_norm in the first ~5 steps, length/entropy canary.

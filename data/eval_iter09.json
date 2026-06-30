@@ -1,0 +1,210 @@
+{
+  "note": "iter-09 discriminative eval set. PRIMARY metric = mean sampled pass@1 (NOT pass@8, which saturates at n=12: on this pool 29 problems=0, 26=1.0, only 4 in between). pass@1 has resolution 1/n and is what SDPO moves (distilling pass@k success raises the floor). train_eval = the trained frontier band (did it learn?); heldout = non-trained, same pool (did it generalize?). Eval at n>=16-24 for pass@1 resolution; report pass@1/2/4/8 curve + bootstrap CI; dose-response across checkpoints.",
+  "selection": "base sampled pass@1 in (0,0.85] from sdpo_passk_probe_v2 (n=12,temp1.0)",
+  "train_eval": [
+    3008,
+    2590,
+    2610,
+    2498,
+    2612,
+    2499,
+    2603,
+    2132,
+    2667,
+    2415
+  ],
+  "heldout": [
+    4001,
+    2608,
+    2294,
+    3565,
+    2445,
+    2129,
+    2951,
+    3896
+  ],
+  "all_ids": [
+    3008,
+    2590,
+    2610,
+    2498,
+    2612,
+    2499,
+    2603,
+    2132,
+    2667,
+    2415,
+    4001,
+    2608,
+    2294,
+    3565,
+    2445,
+    2129,
+    2951,
+    3896
+  ],
+  "per_problem": [
+    {
+      "id": 3008,
+      "difficulty": "medium",
+      "base_n_ac": 9,
+      "base_n": 12,
+      "base_pass1": 0.75,
+      "base_pass8": 1.0,
+      "in_train_band": true
+    },
+    {
+      "id": 2590,
+      "difficulty": "medium",
+      "base_n_ac": 8,
+      "base_n": 12,
+      "base_pass1": 0.667,
+      "base_pass8": 1.0,
+      "in_train_band": true
+    },
+    {
+      "id": 2610,
+      "difficulty": "medium",
+      "base_n_ac": 8,
+      "base_n": 12,
+      "base_pass1": 0.667,
+      "base_pass8": 1.0,
+      "in_train_band": true
+    },
+    {
+      "id": 2498,
+      "difficulty": "easy",
+      "base_n_ac": 7,
+      "base_n": 12,
+      "base_pass1": 0.583,
+      "base_pass8": 1.0,
+      "in_train_band": true
+    },
+    {
+      "id": 2612,
+      "difficulty": "easy",
+      "base_n_ac": 7,
+      "base_n": 12,
+      "base_pass1": 0.583,
+      "base_pass8": 1.0,
+      "in_train_band": true
+    },
+    {
+      "id": 2499,
+      "difficulty": "medium",
+      "base_n_ac": 7,
+      "base_n": 12,
+      "base_pass1": 0.583,
+      "base_pass8": 1.0,
+      "in_train_band": true
+    },
+    {
+      "id": 2603,
+      "difficulty": "medium",
+      "base_n_ac": 7,
+      "base_n": 12,
+      "base_pass1": 0.583,
+      "base_pass8": 1.0,
+      "in_train_band": true
+    },
+    {
+      "id": 2132,
+      "difficulty": "medium",
+      "base_n_ac": 6,
+      "base_n": 12,
+      "base_pass1": 0.5,
+      "base_pass8": 1.0,
+      "in_train_band": true
+    },
+    {
+      "id": 2667,
+      "difficulty": "medium",
+      "base_n_ac": 5,
+      "base_n": 12,
+      "base_pass1": 0.417,
+      "base_pass8": 1.0,
+      "in_train_band": true
+    },
+    {
+      "id": 2415,
+      "difficulty": "medium",
+      "base_n_ac": 3,
+      "base_n": 12,
+      "base_pass1": 0.25,
+      "base_pass8": 0.982,
+      "in_train_band": true
+    },
+    {
+      "id": 4001,
+      "difficulty": "easy",
+      "base_n_ac": 10,
+      "base_n": 12,
+      "base_pass1": 0.833,
+      "base_pass8": 1.0,
+      "in_train_band": false
+    },
+    {
+      "id": 2608,
+      "difficulty": "easy",
+      "base_n_ac": 2,
+      "base_n": 12,
+      "base_pass1": 0.167,
+      "base_pass8": 0.909,
+      "in_train_band": false
+    },
+    {
+      "id": 2294,
+      "difficulty": "medium",
+      "base_n_ac": 2,
+      "base_n": 12,
+      "base_pass1": 0.167,
+      "base_pass8": 0.909,
+      "in_train_band": false
+    },
+    {
+      "id": 3565,
+      "difficulty": "medium",
+      "base_n_ac": 2,
+      "base_n": 12,
+      "base_pass1": 0.167,
+      "base_pass8": 0.909,
+      "in_train_band": false
+    },
+    {
+      "id": 2445,
+      "difficulty": "easy",
+      "base_n_ac": 1,
+      "base_n": 12,
+      "base_pass1": 0.083,
+      "base_pass8": 0.667,
+      "in_train_band": false
+    },
+    {
+      "id": 2129,
+      "difficulty": "medium",
+      "base_n_ac": 1,
+      "base_n": 12,
+      "base_pass1": 0.083,
+      "base_pass8": 0.667,
+      "in_train_band": false
+    },
+    {
+      "id": 2951,
+      "difficulty": "medium",
+      "base_n_ac": 1,
+      "base_n": 12,
+      "base_pass1": 0.083,
+      "base_pass8": 0.667,
+      "in_train_band": false
+    },
+    {
+      "id": 3896,
+      "difficulty": "medium",
+      "base_n_ac": 1,
+      "base_n": 12,
+      "base_pass1": 0.083,
+      "base_pass8": 0.667,
+      "in_train_band": false
+    }
+  ]
+}

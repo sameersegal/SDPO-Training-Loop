@@ -36,7 +36,8 @@ _CODE = ["_paths.py", "ojbench_eval.py", "sdpo_ojbench.py", "sdpo_train.py",
          "sdpo_feedback.py", "sdpo_passk.py", "sdpo_eval_vllm.py", "eval_runner.py",
          "gen_rollouts.py", "sdpo_critic.py", "sdpo_prompts.py", "teacher_eval.py"]
 _DATA = ["ojb_splits.json", "ojb_splits_full.json", "ojbench_selected.json",
-         "frontier_band.json"]  # iteration-07: train on the 35 sometimes-solvable pids
+         "frontier_band.json",      # iteration-07: 35 sometimes-solvable pids (n=4 probe)
+         "frontier_band_v2.json"]   # iteration-08: 10 binary-frontier pids (n=12/temp-1.0 re-probe)
 
 # CUDA *devel* base: flashinfer JIT-compiles kernels at runtime and needs nvcc.
 # Versions pinned to match the validated GB10 venv exactly.
@@ -418,7 +419,7 @@ def passk_one(which: str, languages: str = "python",
               adapter: str = "/root/app/sdpo_out", ojb_splits: str = "ojb_splits.json",
               tag: str = "", model: str = "Qwen/Qwen3-8B",
               max_model_len: int = 40960, max_tokens: int = 32768, limit: int = 0,
-              ids: str = ""):
+              ids: str = "", n: int = 8, temperature: float = 0.8):
     """pass@k only (returns as soon as it finishes — no slow held-out/gsm8k tail).
 
     adapter: LoRA dir to serve when which=='sdpo' (e.g. .../sdpo_out/checkpoint-20).
@@ -462,8 +463,8 @@ def passk_one(which: str, languages: str = "python",
             time.sleep(5)
     try:
         _cmd = ["python", "sdpo_passk.py", "--served-model", served,
-                "--tag", tag, "--n", "8", "--ks", "1,2,4,8",
-                "--max-tokens", str(max_tokens), "--temperature", "0.8",
+                "--tag", tag, "--n", str(n), "--ks", "1,2,4,8",
+                "--max-tokens", str(max_tokens), "--temperature", str(temperature),
                 "--languages", languages, "--concurrency", "48", "--wandb"]
         if limit:
             _cmd += ["--limit", str(limit)]
@@ -484,6 +485,29 @@ def passk_run(which: str = "sdpo", languages: str = "python", out: str = ""):
         json.dump(res, f, indent=2)
     print(f"[modal] wrote {fname}")
     print(json.dumps(res["summary"], indent=2))
+
+
+@app.local_entrypoint()
+def probe_solve_rate(ids: str = "", languages: str = "python", n: int = 12,
+                     temperature: float = 1.0, tag: str = "probe_v2", out: str = "",
+                     gpu: str = "H200", model: str = "Qwen/Qwen3-8B"):
+    """iteration-08: probe the BASE model's per-problem BINARY solve rate (n samples at the
+    TRAINING temperature) over a given id list -> used to build a tightened frontier band.
+    solve rate p = n_ac/n; the binary-frontier is p in ~[0.3,0.7] (minimizes flat groups).
+    Probe easy+medium only (hard rollouts are 0 -> flat + slow 32k tail). Writes json +
+    prints per-problem solve rates."""
+    import json
+    res = passk_one.with_options(gpu=gpu).remote(
+        "base", languages, "/root/app/sdpo_out", "ojb_splits.json", tag,
+        model=model, ids=ids, n=n, temperature=temperature)
+    fname = out or f"sdpo_passk_{tag}.json"
+    json.dump(res, open(fname, "w"), indent=2)
+    rows = sorted(res["results"], key=lambda r: r["n_ac"] / max(1, r["n"]))
+    print(f"[probe] {len(rows)} problems, n={n}, temp={temperature}")
+    for r in rows:
+        sr = r["n_ac"] / max(1, r["n"])
+        print(f"  loj-{r['id']} {r['difficulty']:<6} {r['n_ac']:>2}/{r['n']} p={sr:.2f}")
+    print(f"[probe] wrote {fname}")
 
 
 @app.local_entrypoint()

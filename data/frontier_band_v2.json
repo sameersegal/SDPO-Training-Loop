@@ -1,0 +1,464 @@
+{
+  "frontier_band": [
+    2132,
+    2415,
+    2498,
+    2499,
+    2590,
+    2603,
+    2610,
+    2612,
+    2667,
+    3008
+  ],
+  "saturated": [
+    2314,
+    2317,
+    2352,
+    2361,
+    2420,
+    2423,
+    2592,
+    2594,
+    2596,
+    2599,
+    2602,
+    2605,
+    2611,
+    2670,
+    3386,
+    3758,
+    4001
+  ],
+  "weak_frontier": [
+    2129,
+    2294,
+    2445,
+    2608,
+    2951,
+    3565,
+    3896
+  ],
+  "hopeless": [
+    2086,
+    2130,
+    2246,
+    2296,
+    2297,
+    2315,
+    2360,
+    2362,
+    2363,
+    2416,
+    2422,
+    2424,
+    2500,
+    2503,
+    2589,
+    2591,
+    2593,
+    2595,
+    2597,
+    2598,
+    2600,
+    2601,
+    2606,
+    2609,
+    2952,
+    3387,
+    3898,
+    4002,
+    4004
+  ],
+  "probe": {
+    "n": 12,
+    "temperature": 1.0,
+    "lo": 0.25,
+    "hi": 0.75,
+    "note": "iter-08 binary solve-rate probe (temp 1.0); band = p in [lo,hi]"
+  },
+  "predicted_flat_group": {
+    "band_v2": 0.036,
+    "full_pool": 0.727
+  },
+  "per_problem": {
+    "2314": {
+      "p": 1.0,
+      "n_ac": 12,
+      "n": 12,
+      "difficulty": "easy"
+    },
+    "2317": {
+      "p": 1.0,
+      "n_ac": 12,
+      "n": 12,
+      "difficulty": "easy"
+    },
+    "2420": {
+      "p": 0.917,
+      "n_ac": 11,
+      "n": 12,
+      "difficulty": "easy"
+    },
+    "2423": {
+      "p": 0.917,
+      "n_ac": 11,
+      "n": 12,
+      "difficulty": "easy"
+    },
+    "2445": {
+      "p": 0.083,
+      "n_ac": 1,
+      "n": 12,
+      "difficulty": "easy"
+    },
+    "2498": {
+      "p": 0.583,
+      "n_ac": 7,
+      "n": 12,
+      "difficulty": "easy"
+    },
+    "2592": {
+      "p": 1.0,
+      "n_ac": 12,
+      "n": 12,
+      "difficulty": "easy"
+    },
+    "2596": {
+      "p": 1.0,
+      "n_ac": 12,
+      "n": 12,
+      "difficulty": "easy"
+    },
+    "2599": {
+      "p": 0.917,
+      "n_ac": 11,
+      "n": 12,
+      "difficulty": "easy"
+    },
+    "2602": {
+      "p": 1.0,
+      "n_ac": 12,
+      "n": 12,
+      "difficulty": "easy"
+    },
+    "2606": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "easy"
+    },
+    "2608": {
+      "p": 0.167,
+      "n_ac": 2,
+      "n": 12,
+      "difficulty": "easy"
+    },
+    "2611": {
+      "p": 0.917,
+      "n_ac": 11,
+      "n": 12,
+      "difficulty": "easy"
+    },
+    "2612": {
+      "p": 0.583,
+      "n_ac": 7,
+      "n": 12,
+      "difficulty": "easy"
+    },
+    "4001": {
+      "p": 0.833,
+      "n_ac": 10,
+      "n": 12,
+      "difficulty": "easy"
+    },
+    "2086": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2129": {
+      "p": 0.083,
+      "n_ac": 1,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2130": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2132": {
+      "p": 0.5,
+      "n_ac": 6,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2246": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2294": {
+      "p": 0.167,
+      "n_ac": 2,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2296": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2297": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2315": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2352": {
+      "p": 1.0,
+      "n_ac": 12,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2360": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2361": {
+      "p": 1.0,
+      "n_ac": 12,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2362": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2363": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2415": {
+      "p": 0.25,
+      "n_ac": 3,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2416": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2422": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2424": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2499": {
+      "p": 0.583,
+      "n_ac": 7,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2500": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2503": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2589": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2590": {
+      "p": 0.667,
+      "n_ac": 8,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2591": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2593": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2594": {
+      "p": 1.0,
+      "n_ac": 12,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2595": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2597": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2598": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2600": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2601": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2603": {
+      "p": 0.583,
+      "n_ac": 7,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2605": {
+      "p": 0.917,
+      "n_ac": 11,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2609": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2610": {
+      "p": 0.667,
+      "n_ac": 8,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2667": {
+      "p": 0.417,
+      "n_ac": 5,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2670": {
+      "p": 1.0,
+      "n_ac": 12,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2951": {
+      "p": 0.083,
+      "n_ac": 1,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "2952": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "3008": {
+      "p": 0.75,
+      "n_ac": 9,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "3386": {
+      "p": 1.0,
+      "n_ac": 12,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "3387": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "3565": {
+      "p": 0.167,
+      "n_ac": 2,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "3758": {
+      "p": 1.0,
+      "n_ac": 12,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "3896": {
+      "p": 0.083,
+      "n_ac": 1,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "3898": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "4002": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    },
+    "4004": {
+      "p": 0.0,
+      "n_ac": 0,
+      "n": 12,
+      "difficulty": "medium"
+    }
+  }
+}

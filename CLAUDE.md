@@ -155,8 +155,9 @@ Figures: `python src/generate_slides.py` (set `ITER=iteration-NN`); cross-iterat
   roughly cap-INDEPENDENT in 24–32k** (measured 13.71 GiB @ 32k, 13.91 GiB @ 24k — barely changed), so
   shrinking the cap 32k→24k does NOT fix it, and **lowering `--num-generations` doesn't either** (the alloc
   is per-microbatch=1). iter-10 tried 32k/0.20 (OOM), 32k/0.15 (vLLM init fail), 24k/0.18 (OOM at step 2) →
-  fell back to **20k/0.20** (iter-09's proven config). Bigger caps need trainer logits-chunking or
-  multi-GPU (not wired). **Don't burn launches re-testing >20k here — it doesn't fit.**
+  fell back to **20k/0.20** (iter-09's proven config). **The two clean paths to a bigger cap: (a) a bigger
+  GPU — `--gpu B200` (178 GiB) fits 32k @ 0.20 with room (iter-10 confirmed); or (b) trainer logits-chunking.**
+  Don't burn H200 launches re-testing >20k — it doesn't fit there; go straight to B200 or 20k.
 - **`--output-dir` MUST be prefixed `sdpo_out/<name>` or the run's checkpoints are LOST.** `train()`
   chdir's to `/root/app` but the `sdpo-outputs` volume mounts at `/root/app/sdpo_out`. A bare
   `--output-dir iter09-dose` writes to `/root/app/iter09-dose` — *off* the mount — so the periodic

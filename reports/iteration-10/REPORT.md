@@ -10,10 +10,13 @@
 > SDPO self-distillation *direction*; LR only sets its *speed and floor*. **iter-11's lever must be a
 > direction guard (entropy/length), not LR.**
 >
-> **NB on the cap:** true 32k (your ask) is **memory-infeasible at G=16 on one H200** — three OOMs proved it
-> (a ~14 GiB peak roughly cap-independent 24–32k, wedged between loss-step OOM at high util and vLLM-init
-> starvation at low util; G doesn't help). Ran **20k @ util 0.20** (iter-09's config), which makes this the
-> *cleanest* goldilocks test anyway (same cap, only LR differs). See CLAUDE.md gotcha.
+> **NB on the cap:** true 32k is **memory-infeasible at G=16 on one H200** (three OOMs — a ~14 GiB peak
+> roughly cap-independent 24–32k, wedged between loss-step OOM at high util and vLLM-init starvation; G
+> doesn't help). The two clean paths are a **bigger GPU** or trainer logits-chunking. This report's
+> *goldilocks* verdict comes from the **20k run** (H200) — the cleanest LR-isolation (same cap as iter-09,
+> only LR differs). **A true 32k run was then launched on a B200 (178 GiB) as the cap control** (app
+> `ap-dgr9uqgiCHmEbXjiqgXgtI`, LR 5e-5); at 32k **clipped_ratio=0%** (vs 20k's 25–31%) — full thinking
+> room, and the model tops out ~24k so it never *needs* 32k. See §5b for its result. See CLAUDE.md gotcha.
 
 ## 1. The three-dose picture
 | run | LR | ΔW @ ckpt-10 | length trajectory | ckpt-10 pass@1 | pass@8 | verdict |
@@ -67,6 +70,16 @@ and the trajectory says it was still degrading.**
   the length was declining (softer than iter-09). **Pipeline-eval** gave the pass@1 verdict; **early-kill**
   stopped at step 14 once the eval + the resuming length-decline showed a milder-but-real collapse (saved
   ~4 h / the remaining 16 steps).
+
+## 5b. The 32k cap control (B200) — status
+To honor the 32k spec and settle the cap confound directly, a true-32k run was launched on a **B200
+(178 GiB)** — the H200 vise (§5) is a memory limit, not a fundamental one, so a bigger GPU fits it. LR 5e-5,
+`--vllm-gpu-util 0.20`, `--output-dir sdpo_out/iter10-32k`. **Step-1 ran clean: clipped_ratio 0%** (mean
+17k, max 24k — full thinking room, vs 20k's 25–31% clipping). This tests whether the 20k cap contributed
+to the collapse: **prediction — it still collapses** (iter-09's clipped-ratio trace already showed the
+collapse ran with the 20k cap *inactive*). The canary/pass@1 result is being measured; expected to confirm
+the collapse is cap-independent, fully exonerating the cap. *(This report's goldilocks verdict does not
+depend on it — the 20k run isolates the LR cleanly.)*
 
 ## 6. Provenance
 - Train: app `ap-BEfF2w6lynIcmI6sYdI0dc`, killed at step 14 (Gate-1). Recipe: iter-09 with **`--lr 5e-5`**

@@ -1,6 +1,10 @@
 # Iteration-09 — apply a real dose: is iter-08's null under-training or no-effect?
 
-> **Status: PLANNED, not started (2026-07-01).** iter-08 established the mechanism (`flat_group`
+> **Status: EXECUTED → see [REPORT.md](REPORT.md) (2026-07-01). Result: decisive NEGATIVE — a real
+> dose (ΔW→2.40) drove the iter-05 collapse (pass@1 −0.20, pass@8 −0.29, paired-CI exclude 0). The plan
+> below is preserved as-designed; the report has the outcome.**
+>
+> **(orig. PLANNED)** iter-08 established the mechanism (`flat_group`
 > 0.75→0.44→0.12) but the definitive eval found **no pass@8 effect** — and the within-run telemetry says
 > why: the policy *barely moved* (peak LR 3e-5 decaying to 1.5e-6 over 8 steps, grad_norm pinned at
 > ~0.02–0.03, effective batch 2 groups/step). iter-09 disambiguates the two live hypotheses:

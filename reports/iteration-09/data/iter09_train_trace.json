@@ -1,0 +1,163 @@
+[
+  {
+    "step": 1,
+    "grad_norm": 0.0229,
+    "flat": 0.0,
+    "rew": 0.4688,
+    "length": 16790.0
+  },
+  {
+    "step": 2,
+    "grad_norm": 0.01958,
+    "flat": 0.0,
+    "rew": 0.5625,
+    "length": 16910.0
+  },
+  {
+    "step": 3,
+    "grad_norm": 0.03029,
+    "flat": 0.0,
+    "rew": 0.5,
+    "length": 12330.0
+  },
+  {
+    "step": 4,
+    "grad_norm": 0.0207,
+    "flat": 0.0,
+    "rew": 0.3125,
+    "length": 16150.0
+  },
+  {
+    "step": 5,
+    "grad_norm": 0.02786,
+    "flat": 0.0,
+    "rew": 0.75,
+    "length": 12530.0
+  },
+  {
+    "step": 6,
+    "grad_norm": 0.02976,
+    "flat": 0.0,
+    "rew": 0.7188,
+    "length": 7589.0
+  },
+  {
+    "step": 7,
+    "grad_norm": 0.02029,
+    "flat": 0.0,
+    "rew": 0.5312,
+    "length": 8242.0
+  },
+  {
+    "step": 8,
+    "grad_norm": 0.03008,
+    "flat": 0.0,
+    "rew": 0.3438,
+    "length": 6224.0
+  },
+  {
+    "step": 9,
+    "grad_norm": 0.02991,
+    "flat": 0.0,
+    "rew": 0.4062,
+    "length": 6688.0
+  },
+  {
+    "step": 10,
+    "grad_norm": 0.03756,
+    "flat": 0.0,
+    "rew": 0.2188,
+    "length": 5506.0
+  },
+  {
+    "step": 11,
+    "grad_norm": 0.05395,
+    "flat": 0.0,
+    "rew": 0.4062,
+    "length": 3983.0
+  },
+  {
+    "step": 12,
+    "grad_norm": 0.07682,
+    "flat": 0.5,
+    "rew": 0.2812,
+    "length": 3060.0
+  },
+  {
+    "step": 13,
+    "grad_norm": 0.03013,
+    "flat": 0.0,
+    "rew": 0.1875,
+    "length": 5740.0
+  },
+  {
+    "step": 14,
+    "grad_norm": 0.05297,
+    "flat": 0.0,
+    "rew": 0.2812,
+    "length": 5298.0
+  },
+  {
+    "step": 15,
+    "grad_norm": 0.06005,
+    "flat": 0.0,
+    "rew": 0.2188,
+    "length": 5338.0
+  },
+  {
+    "step": 16,
+    "grad_norm": 0.02062,
+    "flat": 0.0,
+    "rew": 0.4062,
+    "length": 7903.0
+  },
+  {
+    "step": 17,
+    "grad_norm": 0.02641,
+    "flat": 0.0,
+    "rew": 0.5,
+    "length": 7056.0
+  },
+  {
+    "step": 18,
+    "grad_norm": 0.02079,
+    "flat": 0.0,
+    "rew": 0.6562,
+    "length": 7015.0
+  },
+  {
+    "step": 19,
+    "grad_norm": 0.02206,
+    "flat": 0.0,
+    "rew": 0.5,
+    "length": 7939.0
+  },
+  {
+    "step": 20,
+    "grad_norm": 0.02739,
+    "flat": 0.0,
+    "rew": 0.6875,
+    "length": 6392.0
+  },
+  {
+    "step": 21,
+    "grad_norm": 0.0222,
+    "flat": 0.0,
+    "rew": 0.3125,
+    "length": 8753.0
+  },
+  {
+    "step": 22,
+    "grad_norm": 0.02421,
+    "flat": 0.0,
+    "rew": 0.5,
+    "length": 8372.0
+  },
+  {
+    "step": 23,
+    "grad_norm": 0.02392,
+    "flat": 0.0,
+    "rew": 0.7188,
+    "length": 7910.0
+  }
+]

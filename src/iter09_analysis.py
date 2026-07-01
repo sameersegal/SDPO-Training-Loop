@@ -36,8 +36,9 @@ def pak(n, c, k):
 
 
 def find(tag):
+    # tag is the short form (base|ckptN); files are sdpo_passk_iter09dose_<tag>.json
     for d in SEARCH:
-        fs = glob.glob(f"{d}/sdpo_passk_{tag}.json")
+        fs = glob.glob(f"{d}/sdpo_passk_iter09dose_{tag}.json")
         if fs:
             return fs[0]
     return None
@@ -55,7 +56,9 @@ def ci(results, k=1, B=2000):
 
 def load(tag):
     f = find(tag)
-    return json.load(open(f))["results"] if f else None
+    if not f: return None
+    d = json.load(open(f))
+    return d["results"] if "results" in d else None
 
 
 def main():

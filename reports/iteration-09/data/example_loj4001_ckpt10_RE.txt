@@ -1,0 +1,648 @@
+# loj-4001 CKPT10 sample (verdict=RE, 27,398 chars)
+
+<think>
+Okay, I need to solve this programming problem. Let me read the problem carefully.
+
+So, the problem is about determining for each word in a dictionary whether it can be rearranged (by swapping any characters) such that it's the lexicographically smallest among all the words. The key here is that after rearrangement, each word can be modified, but all words are of the same length m.
+
+The main idea is to check for each word if there exists a permutation of its characters that is lexicographically smaller than all other words. But since each word can be rearranged, the challenge is to find for each word the minimal possible permutation and then compare it with the minimal permutations of the other words.
+
+Wait, no. Wait, the problem says that for a given word i, after rearrangement, it must be the smallest among all the rearranged words. So, for each word i, we need to check if there exists a rearrangement of its characters such that this rearranged word is smaller than all other rearranged words.
+
+But how can we do this efficiently?
+
+Let me think. For each word, the minimal possible rearrangement is the sorted string. Because if you sort the characters in ascending order, you get the lexicographically smallest possible string. However, if the sorted string of word i is not smaller than the sorted string of some other word j, then even if we rearrange word i, it can't be smaller than the sorted version of j. Because the sorted string of j is the smallest possible for j, and if the sorted i is not smaller than that, then there's no way for any rearrangement of i to be smaller than j's rearrangement.
+
+Wait, that's an important point. For each word, the minimal possible arrangement is the sorted version. So, if we compare the sorted versions of all words, the sorted version of word i must be the smallest among all sorted versions. Then, for that word i, it's possible to rearrange it to be the smallest. But if there's another word j whose sorted version is smaller than the sorted version of i, then even if we rearrange i, it can't be smaller than j's sorted version, so i can't be the smallest.
+
+So, the solution is: for each word, sort its characters to get the minimal possible string. Then, check if this sorted string is the lexicographically smallest among all the sorted strings of the words. If yes, then the answer for this word is 1; else, 0.
+
+Wait, but that's only considering the sorted versions. For example, if a word's sorted version is not the smallest, but there exists another word whose sorted version is even smaller. Then, even if we rearrange the word, it can't be smaller than that other word's sorted version. Therefore, the only way for a word to be the smallest is if its sorted version is the smallest among all sorted versions.
+
+So the approach is:
+
+1. For each word, compute its sorted version (sorted characters).
+2. Find the minimum of all these sorted versions.
+3. For each word, check if its sorted version equals this minimum. If yes, then it can be rearranged to be the smallest, so output 1; else, 0.
+
+But wait, the problem allows rearranging all words. So, for a word to be the smallest, we can rearrange it to be the sorted version, and rearrange other words to be their sorted versions. However, the other words' sorted versions must be greater than or equal to the sorted version of the current word. Therefore, the current word's sorted version must be the smallest among all sorted versions.
+
+So, the answer is to check for each word if its sorted version is the minimal one among all sorted versions.
+
+This seems to be the correct approach.
+
+Let me test this with the example given.
+
+Example 1:
+
+Input words: "bananaa", "abandon", "baannaa", "notnotn"
+
+For each word, sorted version:
+
+- "bananaa" sorted: a a a a b n n
+Wait, let's compute the actual sorted strings.
+
+Original words:
+
+1. bananaa → letters: b, a, n, a, n, a, a → sorted is a a a a b n n → "aaabnnn"? Wait, let me count:
+
+Wait, bananaa is 7 letters. Let's see:
+
+Letters are: b, a, n, a, n, a, a. So sorted is a, a, a, a, b, n, n → "aaaabnn".
+
+Second word is abandon: a, b, a, n, d, o, n → sorted is a, a, b, d, n, n, o → "aabdnno".
+
+Third word is baannaa: b, a, a, n, n, a, a → sorted is a, a, a, a, b, n, n → same as first word: "aaaabnn".
+
+Fourth word: notnotn → letters: n, o, t, n, o, t, n → sorted is n, n, n, o, o, t, t → "nnnoott".
+
+So the sorted strings are:
+
+1. aaaabnn
+2. aabdnno
+3. aaaabnn
+4. nnnoott
+
+The minimal sorted string is "aaaabnn" (from word 1 and 3). So for words 1 and 3, their sorted strings are the minimal. So the output for them is 1. For words 2 and 4, it's 0.
+
+But the sample output says that the second word can be made the smallest. Wait, this seems to contradict the approach. Because according to this, the second word's sorted string is "aabdnno" which is larger than the minimal "aaaabnn". So according to the approach, the answer for the second word would be 0. But the sample explanation says that the second word can be made the smallest.
+
+This suggests that there's a flaw in the approach. So my reasoning is incorrect.
+
+Hmm. What's wrong here?
+
+Let me re-examine the sample explanation.
+
+In the sample explanation, the second word is "abandon" which can be rearranged to "abondan" (maybe?), which is the lexicographically smallest possible. But the sorted version of "abandon" is "aabdnno", which is "aabdnno". The sorted version of the first word is "aaaabnn". So "aabdnno" is larger than "aaaabnn". Therefore, according to the previous approach, the second word's sorted version is not the minimal. Therefore, the answer should be 0. However, the sample says that the second word can be made the smallest.
+
+This indicates that the initial approach is wrong. Therefore, I need to rethink the problem.
+
+The key mistake here is that the sorted version of the second word is not the minimal, but there exists a rearrangement of the second word that is smaller than the sorted version of the first word.
+
+Wait, but the sorted version of the first word is the minimal possible for that word. So, if the second word's sorted version is larger than the first word's sorted version, then there is no way for the second word to be rearranged to be smaller than the first word's sorted version. Therefore, the sample explanation must be wrong, or there's a misunderstanding.
+
+But according to the sample explanation, the second word can be rearranged to become the smallest. So, this suggests that the initial approach is incorrect.
+
+So, the problem is more complex than just comparing sorted versions of all words. Let's think again.
+
+The problem requires that for word i, there exists a rearrangement of its characters such that it is lexicographically smaller than all other words' rearrangements.
+
+So, for word i, we need to find a rearrangement of its characters such that it is smaller than the rearrangement of every other word j. But the other words can also be rearranged in any way.
+
+So, for word i to be the smallest, we can choose any rearrangement of its characters, and for each other word j, choose any rearrangement of its characters such that the rearrangement of i is smaller than that of j.
+
+But how to find such a rearrangement for i?
+
+The optimal strategy for word i is to find the lexicographically smallest rearrangement of its characters, and then compare it with the lexicographically largest rearrangement of the other words. If the smallest rearrangement of i is smaller than the largest rearrangement of the other words, then there exists a way for i to be the smallest.
+
+Wait, no. Because the other words can be rearranged to be as large as possible, but we need to ensure that for each other word j, there exists a rearrangement of j that is larger than the rearrangement of i.
+
+But for the purpose of i being the smallest, we can choose the smallest possible rearrangement of i and the largest possible rearrangement of j. If the smallest i is smaller than the largest j, then there's a possibility.
+
+But this seems complicated. However, the correct approach is to find for each word i, the minimal possible rearrangement of i, and compare it with the maximal possible rearrangement of all other words. If the minimal i is smaller than the maximal of others, then it's possible for i to be the smallest.
+
+But how to compute this?
+
+Alternatively, for each word i, the minimal possible rearrangement of i is the sorted version. For the other words j, their maximal possible rearrangement is the reverse sorted version (all characters in descending order). If the sorted i is smaller than the reverse sorted j for all j, then it's possible for i to be the smallest.
+
+Wait, this makes sense. Because for word i, we can choose its minimal rearrangement (sorted), and for each other word j, we can choose its maximal rearrangement (reverse sorted). If the sorted i is smaller than the reverse sorted j for all j, then the sorted i is the smallest among all possible rearrangements.
+
+But if for any j, the reverse sorted j is smaller than the sorted i, then it's impossible for i to be the smallest.
+
+So, the correct approach is:
+
+For each word i, compute its sorted version (sorted_i). For all other words j, compute their reverse sorted version (reverse_sorted_j). If sorted_i is less than all reverse_sorted_j, then i can be the smallest.
+
+This is because:
+
+- For word i, we choose the minimal possible rearrangement (sorted_i).
+- For each other word j, we choose the maximal possible rearrangement (reverse_sorted_j).
+- If sorted_i < reverse_sorted_j for all j, then sorted_i is the smallest among all possible rearrangements.
+
+But if there exists a j such that reverse_sorted_j < sorted_i, then it's impossible for i to be the smallest, because even if we choose the maximal rearrangement for j, it's smaller than the minimal rearrangement of i.
+
+So, the correct approach is:
+
+For each word i:
+
+- Compute sorted_i.
+- For all other words j, compute reverse_sorted_j.
+- Check if sorted_i is less than all reverse_sorted_j.
+- If yes, then output 1; else, 0.
+
+But this approach is computationally expensive, as for each word i, we have to compare it with all other words' reverse_sorted versions. For large n and m, this could be O(n^2 * m), which may not be feasible for n=3000 and m=3000.
+
+But let's think about the sample case again.
+
+Sample case:
+
+Word 1: "bananaa" → sorted_i is "aaaabnn" (sorted). reverse_sorted_j for other words:
+
+For word 2: "abandon" → reverse_sorted is "ondbaa" (sorted in descending order is "ondbaa"? Wait, let's compute.
+
+The reverse sorted version of a word is the characters sorted in descending order. For "abandon", sorted in descending order would be "nnoabda" (wait, the letters are a, b, a, n, d, o, n → sorted descending is n, n, o, d, b, a, a → "nnodbaa".
+
+So sorted_i for word 1 is "aaaabnn" (sorted in ascending), reverse_sorted for word 2 is "nnodbaa".
+
+Now, sorted_i (word 1) is "aaaabnn", and reverse_sorted of word 2 is "nnodbaa". Since "aaaabnn" is less than "nnodbaa", it's okay.
+
+But for word 2, its sorted_i is "aabdnno", and its reverse_sorted is "ondbaan".
+
+For other words, like word 1, reverse_sorted is "nnnbaaa".
+
+Now, sorted_i for word 2 is "aabdnno", which is compared to reverse_sorted of word 1, which is "nnnbaaa". "aabdnno" is less than "nnnbaaa", so that's okay. For word 3, sorted_i is "aaaabnn" (same as word 1), reverse_sorted is "nnnbaaa". So sorted_i (word 2) is "aabdnno", which is compared to "nnnbaaa" and "nnodbaa" (word 2's reverse_sorted is "nnodbaa", which is larger than "aabdnno". So the sorted_i of word 2 is less than all other reverse_sorted versions. Hence, word 2 can be the smallest.
+
+So according to this approach, the sample's second word would be marked as 1, which aligns with the sample explanation.
+
+Thus, the correct approach is:
+
+For each word i:
+
+1. Compute its sorted version (sorted_i).
+2. For each other word j, compute its reverse sorted version (reverse_sorted_j).
+3. Check if sorted_i is less than all reverse_sorted_j.
+4. If yes, then output 1 for word i.
+
+But how to implement this efficiently?
+
+First, for each word, we need to precompute sorted_i and reverse_sorted_i.
+
+Then, for each word i, we need to check if sorted_i is less than all reverse_sorted_j for j != i.
+
+This is O(n^2 * m) time, which for n=3000 would be 9,000,000 * m, which for m=3000 is 27 billion operations. This is way too slow.
+
+Thus, we need a more efficient approach.
+
+Let's think: What is the reverse_sorted_j for word j? It is the sorted string in descending order.
+
+So, for each word, we can precompute the sorted and reverse_sorted versions.
+
+Then, for each word i, the sorted_i must be less than the reverse_sorted_j for all j != i.
+
+But how to find the minimum of all reverse_sorted_j for j != i?
+
+Wait, no. For each i, we need to check that sorted_i is less than the minimum reverse_sorted_j of all j != i.
+
+Wait, no. Because if there is at least one j where reverse_sorted_j is less than sorted_i, then sorted_i is not less than all reverse_sorted_j. Thus, for the condition to be true, sorted_i must be less than the minimum of all reverse_sorted_j for j != i.
+
+But the minimum of all reverse_sorted_j for j != i is the smallest of all reverse_sorted strings except for reverse_sorted_i.
+
+So, if we can precompute the minimum of all reverse_sorted strings, and then check if sorted_i is less than this minimum, except for the case where i is the one that contributes to the minimum.
+
+Wait, this seems possible.
+
+Let me think:
+
+Compute for all words their reverse_sorted strings.
+
+Find the minimum reverse_sorted string among all words.
+
+Let this minimum be min_rev.
+
+Now, for each word i:
+
+- If sorted_i is less than min_rev, then it's possible for i to be the smallest.
+- But if the reverse_sorted_i is equal to min_rev, then we need to check if there are other words with reverse_sorted equal to min_rev. Because if there are other words with reverse_sorted equal to min_rev, then for i, the reverse_sorted_i is equal to min_rev, and sorted_i must be less than min_rev to be valid.
+
+Wait, this is getting complicated. Let me think again.
+
+The idea is that the minimum reverse_sorted string across all words is the smallest possible reverse_sorted string. For a word i to be able to have its sorted_i less than all reverse_sorted_j for j != i, it must be that sorted_i is less than the minimum reverse_sorted string of all j != i.
+
+So, the minimum reverse_sorted string of all j != i is:
+
+If the minimum reverse_sorted string of all words is not reverse_sorted_i, then it is the minimum.
+
+If the minimum reverse_sorted string is reverse_sorted_i, then it is the second smallest.
+
+Thus, for each word i, we need to find the minimum reverse_sorted string among all words except i.
+
+But how to compute this efficiently?
+
+If we precompute the overall minimum reverse_sorted string and the count of how many times it appears, then for each word i:
+
+- If the reverse_sorted_i is not the overall minimum, then the minimum for j != i is the overall minimum.
+- If the reverse_sorted_i is the overall minimum, then the minimum for j != i is the second minimum.
+
+Thus, for each word i, the minimum reverse_sorted_j for j != i is:
+
+- If reverse_sorted_i is not the overall minimum: overall_min.
+- Else: second_min.
+
+So, the steps are:
+
+1. Precompute all reverse_sorted strings.
+2. Find the overall_min and count how many times it appears.
+3. Find the second_min (the minimum of all reverse_sorted strings that are not equal to overall_min).
+4. For each word i:
+   a. If reverse_sorted_i is not the overall_min:
+      - The minimum for j != i is overall_min.
+      - Check if sorted_i < overall_min.
+   b. If reverse_sorted_i is the overall_min:
+      - If the count of overall_min is more than 1: the minimum for j != i is overall_min.
+      - Else: the minimum for j != i is second_min.
+      - Check if sorted_i < the minimum for j != i.
+
+Thus, the approach is to find the overall_min and second_min.
+
+This way, for each word i, the check can be done in O(1) time.
+
+This would reduce the overall complexity to O(n*m) for sorting, and then O(n) for the checks.
+
+This is feasible for large n and m.
+
+Now, let's apply this to the sample case.
+
+Sample case:
+
+reverse_sorted strings:
+
+word1: "nnnbaaa" (reverse sorted of "bananaa" is sorted in descending order: n, n, n, b, a, a, a → "nnnbaaa")
+
+word2: "nnodbaa" (sorted in descending order of "abandon" → n, n, o, d, b, a, a → "nnodbaa")
+
+word3: "nnnbaaa" (same as word1)
+
+word4: "nnnoott" (sorted descending of "notnotn" → t, t, o, o, n, n, n → "nnnoott")
+
+Overall_min is "nnnbaaa" (appears twice).
+
+second_min is "nnodbaa" (the next smallest).
+
+For word2, reverse_sorted is "nnodbaa", which is not the overall_min. So the minimum for j != i is overall_min ("nnnbaaa").
+
+Check if sorted_i (word2's sorted is "aabdnno") is less than "nnnbaaa". Since "aabdnno" < "nnnbaaa", it is true. Hence, word2 can be marked as 1.
+
+This matches the sample.
+
+So this approach works.
+
+Now, how to implement this.
+
+First, compute all reverse_sorted strings.
+
+Then, find the overall_min and its count.
+
+Then, find the second_min.
+
+Then, for each word i:
+
+if reverse_sorted_i is not the overall_min:
+
+   min_for_j = overall_min
+
+else:
+
+   if count > 1:
+
+      min_for_j = overall_min
+
+   else:
+
+      min_for_j = second_min
+
+then check if sorted_i < min_for_j.
+
+If yes, then output 1, else 0.
+
+Thus, the code steps are:
+
+- Read all words.
+
+- For each word, compute sorted_i and reverse_sorted_i.
+
+- Compute the list of reverse_sorted strings.
+
+- Find overall_min and count.
+
+- Find second_min.
+
+- For each word, check if sorted_i < min_for_j.
+
+Now, the code can be written as follows.
+
+Now, the code for finding the overall_min and second_min.
+
+For example, in Python:
+
+reverse_sorted_list = [sorted(word, reverse=True) for word in words]
+
+Wait, no. We need to sort each word in descending order and then convert it to a string.
+
+For example:
+
+for word in words:
+
+    sorted_desc = ''.join(sorted(word, reverse=True))
+
+So, for each word, we compute sorted_desc.
+
+Then, find the overall_min as the minimum of all sorted_desc strings.
+
+Similarly, the second_min is the minimum of all sorted_desc strings that are not equal to the overall_min.
+
+But how to find the second_min.
+
+We can do this by iterating through all sorted_desc strings, and for each, if it's not equal to the overall_min, we keep track of the minimum.
+
+This can be done with a loop.
+
+So, the code steps are:
+
+sorted_desc_list = [sorted(word, reverse=True) for word in words]
+
+overall_min = min(sorted_desc_list)
+
+count = sorted_desc_list.count(overall_min)
+
+# find second_min
+
+second_min = None
+
+for s in sorted_desc_list:
+
+    if s != overall_min:
+
+        if second_min is None or s < second_min:
+
+            second_min = s
+
+Now, for each word:
+
+if reverse_sorted_i is not overall_min:
+
+   min_for_j = overall_min
+
+else:
+
+   if count > 1:
+
+      min_for_j = overall_min
+
+   else:
+
+      min_for_j = second_min
+
+then check if sorted_i < min_for_j.
+
+This will determine if the word can be the smallest.
+
+Thus, the code can be implemented.
+
+Now, let's think about the sample case.
+
+sorted_desc_list for the sample is:
+
+word1: "nnnbaaa"
+
+word2: "nnodbaa"
+
+word3: "nnnbaaa"
+
+word4: "nnnoott"
+
+overall_min is "nnnbaaa", count is 2.
+
+second_min is the minimum of the other strings: "nnodbaa" and "nnnoott". The minimum is "nnodbaa".
+
+Now, for word2, reverse_sorted_i is "nnodbaa", which is not overall_min. So min_for_j is "nnnbaaa". Check if sorted_i (word2's sorted is "aabdnno") is less than "nnnbaaa", which it is. Hence, output 1.
+
+For word3, reverse_sorted_i is "nnnbaaa" (overall_min), count is 2. So min_for_j is overall_min. Check if sorted_i ("aaaabnn") is less than "nnnbaaa" → yes. Hence, output 1.
+
+For word1, reverse_sorted_i is "nnnbaaa" (overall_min), count is 2. min_for_j is overall_min. Check if sorted_i is less than "nnnbaaa" → yes. Hence, output 1.
+
+For word4, reverse_sorted_i is "nnnoott" (not overall_min). min_for_j is "nnnbaaa". Check if sorted_i (sorted string of "notnotn" is "nnnoott") is less than "nnnbaaa"? No, because "nnnoott" is larger than "nnnbaaa". Hence, output 0.
+
+Thus, the output is 1 1 1 0.
+
+Which matches the sample.
+
+Thus, the code is correct.
+
+Now, the code in Python.
+
+Now, let's code this.
+
+The code steps:
+
+Read n and m.
+
+Read the n words.
+
+For each word, compute sorted_i and reverse_sorted_i.
+
+Compute the sorted_desc_list.
+
+Find overall_min and count.
+
+Find second_min.
+
+For each word, check if sorted_i < min_for_j.
+
+Now, implement this.
+
+But note that for the sorted_i, we need to sort the characters in ascending order, and for reverse_sorted_i, in descending order.
+
+Now, in Python:
+
+sorted_i = ''.join(sorted(word))
+
+reverse_sorted_i = ''.join(sorted(word, reverse=True))
+
+So, for each word.
+
+Now, the code:
+
+import sys
+
+def main():
+    import sys
+    input = sys.stdin.read().split()
+    n = int(input[0])
+    m = int(input[1])
+    words = input[2:2+n]
+    
+    # Compute sorted and reverse_sorted for each word
+    sorted_list = []
+    reverse_sorted_list = []
+    for word in words:
+        sorted_word = ''.join(sorted(word))
+        reverse_sorted_word = ''.join(sorted(word, reverse=True))
+        sorted_list.append(sorted_word)
+        reverse_sorted_list.append(reverse_sorted_word)
+    
+    # Find overall_min and count
+    overall_min = min(reverse_sorted_list)
+    count = reverse_sorted_list.count(overall_min)
+    
+    # Find second_min
+    second_min = None
+    for s in reverse_sorted_list:
+        if s != overall_min:
+            if second_min is None or s < second_min:
+                second_min = s
+    
+    # For each word, check
+    result = []
+    for i in range(n):
+        current_reverse_sorted = reverse_sorted_list[i]
+        if current_reverse_sorted != overall_min:
+            min_for_j = overall_min
+        else:
+            if count > 1:
+                min_for_j = overall_min
+            else:
+                min_for_j = second_min
+        if sorted_list[i] < min_for_j:
+            result.append('1')
+        else:
+            result.append('0')
+    
+    print(''.join(result))
+
+if __name__ == "__main__":
+    main()
+
+But wait, what if there is no second_min? For example, if all reverse_sorted strings are the same as the overall_min. In that case, second_min is None. But in this case, count would be n, and for any i, the min_for_j would be overall_min, and the check is if sorted_i < overall_min.
+
+But this is handled in the code, since for the case where second_min is None, the code would have not set it, and the code would have:
+
+if current_reverse_sorted is overall_min, then if count > 1, min_for_j is overall_min. But in this case, count is n, so it would be.
+
+Thus, the code should handle it.
+
+Now, let's test the code on the sample input.
+
+Sample input:
+
+4
+bananaa
+abandon
+baannaa
+notnotn
+
+sorted_list for each word:
+
+word1: sorted("bananaa") → "aaaabnn"
+
+word2: sorted("abandon") → "aabdnno"
+
+word3: sorted("baannaa") → "aaaabnn"
+
+word4: sorted("notnotn") → "nnnoott"
+
+reverse_sorted_list:
+
+word1: sorted in reverse → "nnnbaaa"
+
+word2: "nnodbaa"
+
+word3: "nnnbaaa"
+
+word4: "nnnoott"
+
+overall_min is "nnnbaaa", count is 2.
+
+second_min is "nnodbaa".
+
+For each word:
+
+i=0:
+
+current_reverse_sorted = "nnnbaaa" (overall_min), count is 2 → min_for_j is overall_min.
+
+sorted_list[i] is "aaaabnn" < "nnnbaaa" → 1.
+
+i=1:
+
+current_reverse_sorted is "nnodbaa" != overall_min → min_for_j is overall_min.
+
+sorted_list[i] is "aabdnno" < "nnnbaaa" → 1.
+
+i=2:
+
+current_reverse_sorted is "nnnbaaa" → count is 2 → min_for_j is overall_min.
+
+sorted_list[i] is "aaaabnn" < "nnnbaaa" → 1.
+
+i=3:
+
+current_reverse_sorted is "nnnoott" != overall_min → min_for_j is "nnnbaaa".
+
+sorted_list[i] is "nnnoott" < "nnnbaaa"? No → 0.
+
+Thus, the output is 1110, which matches the sample.
+
+Thus, the code works.
+
+Now, considering the constraints, the code is efficient enough. The time complexity is O(n*m) for sorting, and O(n) for the rest steps. For n=3000 and m=3000, it's O(9,000,000) operations, which should be acceptable.
+
+Thus, this code should solve the problem.
+</think>
+
+To solve this problem, we need to determine if each word in a dictionary can be rearranged such that it is the lexicographically smallest among all other words after any number of character swaps. The key insight is to compare the sorted version of each word with the minimum possible reverse-sorted version of other words.
+
+### Approach
+1. **Sort Each Word**: For each word, compute its lexicographically smallest form (sorted in ascending order) and its lexicographically largest form (sorted in descending order).
+2. **Find Minimum Reverse-Sorted Values**: Identify the minimum reverse-sorted value across all words. This helps in determining the smallest possible largest value of any other word.
+3. **Determine Second Minimum**: If the minimum reverse-sorted value appears multiple times, the second smallest value is used to handle cases where the minimum value is the same for multiple words.
+4. **Check Feasibility**: For each word, check if its sorted form is smaller than the minimum reverse-sorted value of all other words. This ensures that the word can be rearranged to be the smallest.
+
+### Solution Code
+```python
+import sys
+
+def main():
+    input = sys.stdin.read().split()
+    n = int(input[0])
+    m = int(input[1])
+    words = input[2:2+n]
+    
+    # Compute sorted and reverse_sorted for each word
+    sorted_list = []
+    reverse_sorted_list = []
+    for word in words:
+        sorted_word = ''.join(sorted(word))
+        reverse_sorted_word = ''.join(sorted(word, reverse=True))
+        sorted_list.append(sorted_word)
+        reverse_sorted_list.append(reverse_sorted_word)
+    
+    # Find overall_min and count
+    overall_min = min(reverse_sorted_list)
+    count = reverse_sorted_list.count(overall_min)
+    
+    # Find second_min
+    second_min = None
+    for s in reverse_sorted_list:
+        if s != overall_min:
+            if second_min is None or s < second_min:
+                second_min = s
+    
+    # For each word, check
+    result = []
+    for i in range(n):
+        current_reverse_sorted = reverse_sorted_list[i]
+        if current_reverse_sorted != overall_min:
+            min_for_j = overall_min
+        else:
+            if count > 1:
+                min_for_j = overall_min
+            else:
+                min_for_j = second_min
+        if sorted_list[i] < min_for_j:
+            result.append('1')
+        else:
+            result.append('0')
+    
+    print(''.join(result))
+
+if __name__ == "__main__":
+    main()
+```
+
+### Explanation
+1. **Sorting**: Each word is sorted to find its smallest possible form and reverse-sorted to find its largest possible form.
+2. **Finding Minimum Reverse-Sorted Value**: The minimum value among all reverse-sorted words is determined to check if a word can be the smallest.
+3. **Handling Multiple Minimums**: If the minimum reverse-sorted value occurs multiple times, we ensure the check remains valid by using the second smallest value when necessary.
+4. **Comparison**: For each word, we check if its sorted form is smaller than the minimum reverse-sorted value of other words, ensuring it can be rearranged to be the smallest.
+
+This approach efficiently checks each word against the necessary conditions using sorting and comparison, ensuring optimal performance even for large input sizes.

@@ -52,6 +52,24 @@ where every CI overlapped base). It regressed on **both trained and held-out** p
 loss, not overfitting or an eval artifact. (ckpt-10's collapsed short outputs also generated ~3× faster
 than base's 16k-thinking completions — the collapse is visible even in eval wall-clock.)
 
+## 4b. Completion-level view — the collapse is a uniform brevity drop, mixed capability effect
+We captured every completion (base + ckpt-10, 432 full-text samples each; plus 768 training rollouts) —
+`sdpo-outputs:/evals/iter09dose/` and `iter09-dose/rollouts.jsonl`. Per-problem
+(`data/iter09_per_problem.csv`):
+
+![per-problem scatter](figures/iter09_per_problem_scatter.png)
+
+- **Length collapsed *uniformly*** — every problem's ckpt-10 completions are ~3× shorter (base 38–83k →
+  ckpt-10 14–27k chars) regardless of outcome. The brevity spiral hit everything.
+- **Capability effect was *mixed but net-negative*** — **11/18 problems regressed** (below the diagonal),
+  several catastrophically: **loj-4001 21/24→0/24**, loj-3008 21→2, loj-2590 15→1, loj-2667 14→1. Yet a
+  few *improved* (loj-2132 7→16, loj-2608 10→18) where base was over-thinking. Net −0.20 pass@1 — not
+  monotonic destruction, but the truncated reasoning wrecked the problems that *needed* it.
+- **The mechanism, concretely (loj-4001):** base = 21 AC / 3 WA (reasons ~43k chars, gets it right);
+  ckpt-10 = **0 AC / 23 WA / 1 RE** (reasons ~25k chars, produces *wrong answers* — not no-code). Less
+  thinking → wrong logic. Full curated pair: `data/example_loj4001_base_AC.txt` vs
+  `data/example_loj4001_ckpt10_RE.txt`.
+
 ## 5. What iter-09 establishes
 Putting iter-08 and iter-09 together bounds the problem cleanly:
 - **Weak dose (iter-08, ΔW 0.46):** null — the model barely moved.

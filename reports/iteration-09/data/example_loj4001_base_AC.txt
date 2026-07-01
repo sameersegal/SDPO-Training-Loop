@@ -1,0 +1,1167 @@
+# loj-4001 BASE sample (verdict=AC, 45,665 chars)
+
+<think>
+Okay, I need to solve this programming problem. Let's read the problem statement carefully.
+
+So, the problem is about determining for each word in a dictionary whether it's possible to rearrange (by swapping any characters) the words such that for every other word, the rearranged version of the current word is lexicographically smaller than all the others. And I have to output a binary string where each character is 1 if possible, 0 otherwise.
+
+Let me think about the approach. 
+
+First, for each word, I need to check if there's a way to rearrange it such that it's the smallest possible among all the other words. But how?
+
+Wait, the key is that after rearrangement, the chosen word (say, word i) must be smaller than all other words. But each word can be rearranged in any way. So for each word i, we need to find the minimal possible arrangement of that word, and then check if that minimal arrangement is smaller than the minimal arrangements of all other words. Wait, no. Because maybe for other words, their minimal arrangement could be larger than the minimal arrangement of word i. But perhaps the problem allows that for word i, we can arrange it in a way that is smaller than all other words, even if they are not arranged in their minimal form. Wait, no. Because for each other word, we can arrange it in any way. So, the problem is, for a particular i, we need to find a way to rearrange word i and all other words such that the rearranged word i is smaller than all others. But how can we do that?
+
+Wait, no. Because the problem says that we can perform any number of operations (swaps) on any words. So, for the purpose of the problem, for each i, we need to choose a rearrangement of each word (including i) such that the rearranged word i is smaller than all the rearranged other words. 
+
+But how can we check that? Because for each word, we can choose any rearrangement. So for the i-th word, we can choose to rearrange it into any permutation of its characters. For the other words, we can also choose any permutation. But the requirement is that the rearranged i-th word is smaller than all the rearranged other words.
+
+So, for each i, the question is: can we find a permutation of word i (let's call it s_i) such that for all j != i, there exists a permutation of word j (s_j) where s_i is lex smaller than s_j. But how?
+
+Wait, no. The problem states that for each i, we have to arrange all words (including others) such that the rearranged i-th word is smaller than all the others. So, for example, for each j != i, the rearranged word j must be larger than the rearranged word i. So, the problem is that for each i, we need to find a way to arrange all words such that the i-th one is the smallest. But how can we check this?
+
+But since the other words can be rearranged, perhaps the way to approach this is: for each i, the minimal possible arrangement of word i must be smaller than the maximal possible arrangement of all other words. Wait, no. Because for the other words, we can arrange them in any way. So to make the i-th word the smallest, we can arrange it as its minimal possible form, and for all other words, arrange them in their maximal possible form. But then, if the minimal of i is less than the maximal of all other words, that's not sufficient. Because for the other words, their minimal arrangement could be smaller than the i's minimal arrangement, but if we can arrange them to be larger, then maybe it's possible.
+
+Wait, perhaps the way to approach this is: For each i, can we arrange word i to be as small as possible, and arrange all other words to be as large as possible. Then, check if the minimal arrangement of i is less than all the maximal arrangements of the other words. Wait, no. Because for the other words, their maximal arrangement is the one that is largest. So if the minimal arrangement of word i is smaller than the maximal arrangement of all other words, then that's not helpful. Because if we can arrange the other words to be as large as possible, then the i's minimal arrangement would be smaller than those. But for the other words, their arrangement can be anything. So to ensure that the i's arrangement is smaller than all others, perhaps we need that for each j != i, the minimal arrangement of word i is less than the maximal arrangement of word j. Because if that's true, then we can arrange word i to be its minimal form and arrange word j to be its maximal form. But then, the i's minimal is less than j's maximal. But that's not enough. Because for j's maximal arrangement, it's the largest possible. So if i's minimal is smaller than j's maximal, then it's possible to arrange j to be something larger than i's minimal. But then, how do we ensure that for all j != i, the i's arrangement is smaller than j's arrangement?
+
+Wait, maybe the problem is that for each i, we need to find a permutation of i's word, say s_i, such that for all other j, there exists a permutation of j's word (s_j) such that s_i < s_j. But how can we ensure that for all j, s_i is less than s_j? Because for each j, we can choose s_j to be as large as possible, but the s_i must be smaller than s_j. So the problem becomes: for each i, can we arrange s_i (as a permutation of the i-th word) such that for every j != i, s_i is less than the maximum possible permutation of j's word. Because if that's true, then we can arrange j's word to be its maximum permutation, and s_i is smaller than that. But if s_i is smaller than the maximum of j's word, then there's a way to arrange j's word to be larger than s_i. However, for other j's, we can arrange their permutations to be larger than s_i.
+
+Wait, but if for every j != i, the minimal possible arrangement of i's word is less than the maximum possible arrangement of j's word, then that would mean that there's a way to arrange i's word to be as small as possible, and j's word to be as large as possible, so that i's arrangement is smaller than j's. But then, if that's possible for all j, then the answer is yes. Because for each j, we can arrange j's word to be its maximum permutation, and i's word to be its minimal permutation. Then, the i's word is smaller than all j's words. So, the problem reduces to: For each i, can the minimal possible arrangement of i's word be less than the maximum possible arrangement of every other word?
+
+Wait, that seems like a possible approach. Because if that's true, then we can arrange i's word to be its minimal, and arrange each j's word to be their maximum. Then, the i's word is smaller than all others. Because for each j != i, the maximum of j's word is larger than the minimal of i's word. Therefore, for the i-th word, the answer is 1. Otherwise, it's 0.
+
+But why is that the case? Let me think. Suppose that for a given i, the minimal arrangement of i is s_i_min, and for every other j, the maximum arrangement of j is s_j_max. If s_i_min < s_j_max for all j != i, then we can arrange i's word as s_i_min, and for each j, arrange it as s_j_max. Then, s_i_min is smaller than all s_j_max. Therefore, the i-th word is the smallest. So the answer for i is 1.
+
+But what if there's a j for which the minimal arrangement of i is not less than the maximum arrangement of j? Then, even if we arrange i as minimal and j as maximum, then s_i_min is not smaller than s_j_max. Therefore, the i can't be the smallest. So, the answer for i would be 0.
+
+So, the problem reduces to: for each word i, check if the minimal possible arrangement of i is less than the maximal possible arrangement of all other words. 
+
+But how to compute the minimal and maximal arrangements for each word?
+
+The minimal arrangement is the sorted string in ascending order. The maximal arrangement is the sorted string in descending order. For example, for the word 'banana', the minimal is 'aaabnn', and the maximal is 'nnbaaa'.
+
+So for each word, we can precompute its sorted version (min) and the reverse sorted version (max). Then, for each i, we need to check that the min_i (sorted i) is less than all the max_j (sorted j) for j != i. 
+
+But wait, no. Because for each j, the max_j is the maximum possible arrangement of j. So for j, the maximum possible arrangement is the sorted in descending order. Therefore, if for all j != i, min_i < max_j, then we can arrange the i-th word to be min_i, and arrange all other words to be their max_j, which would make min_i smaller than all of them. Therefore, the answer for i is 1.
+
+But how to check this for each i?
+
+Let me think. For each i, the minimal arrangement of i is sorted_i_min. For all j != i, sorted_j_max is the max arrangement of j. So for each i, we need to check if sorted_i_min is less than all sorted_j_max for j != i.
+
+But how can we check that? For each i, the minimal arrangement of i must be less than the minimal of all the max_j for j != i? No. Because if sorted_i_min is less than all sorted_j_max, then it's possible.
+
+But how to compute this efficiently.
+
+Let me think of the steps.
+
+First, for each word, compute its sorted_min (sorted in ascending order) and sorted_max (sorted in descending order).
+
+Then, for each i, we need to check if the sorted_min_i is less than all the sorted_max_j for j != i.
+
+But how?
+
+For example, suppose we have a list of all sorted_max for all words. Then, for each i, we need to check that the sorted_min_i is less than the minimum of the sorted_max for all j != i.
+
+Wait, no. Because if the sorted_min_i is less than the minimum of all sorted_max_j for j != i, then it's certainly less than all of them. Because the minimum of the sorted_max_j's is the smallest among them. So if sorted_min_i is less than that, then it is less than all.
+
+But if the sorted_min_i is less than the maximum of the sorted_max_j's, then that's not sufficient. Because there could be a j where sorted_max_j is smaller than sorted_min_i.
+
+Wait, no. Because if sorted_min_i is less than all sorted_max_j for j != i, then for each j, sorted_max_j is larger than sorted_min_i. But how can we check that?
+
+So for each i, the sorted_min_i must be less than every sorted_max_j where j != i. So for each i, we can check that sorted_min_i is less than the minimum of the sorted_max_j for all j != i.
+
+But how can we compute the minimum of the sorted_max_j for all j != i?
+
+Let me think. Suppose we have an array of all the sorted_max for all words. Let's call this array max_list. For each i, we need to compute the minimum of max_list for all elements except the i-th element. Then check if sorted_min_i is less than that minimum.
+
+But for that, how can we compute the minimum of the max_list excluding the i-th element?
+
+For example, if we have the global minimum of max_list, then for each i, if the global minimum is not from the i-th element, then the minimum excluding the i-th element is the same as the global minimum. However, if the global minimum is the i-th element, then the minimum excluding i-th is the second minimum.
+
+So, the approach would be:
+
+- Precompute the sorted_min for each word (sorted in ascending order).
+- Precompute the sorted_max for each word (sorted in descending order).
+- Compute the list of all sorted_max for all words, call it max_list.
+- Compute the global minimum of max_list. Let's call it min_max_all.
+- Also compute the second minimum of max_list, but maybe that's not needed. Wait, no. Let's think: For each i, when we remove the i-th element from max_list, what is the minimum of the remaining elements?
+
+If the original min_max_all is not the i-th element, then the minimum of the remaining elements is min_max_all. But if the original min_max_all is the i-th element, then the minimum of the remaining elements is the second smallest in the list.
+
+So, for each i, the minimum of the max_list excluding i-th element is:
+
+If the original min_max_all is not the same as the i-th element, then it's min_max_all.
+
+Else, it's the second minimum of the list.
+
+But how to compute that?
+
+But for the problem, we need to check for each i, whether sorted_min_i is less than the minimum of max_list excluding i-th element.
+
+So, how to compute this for all i?
+
+An alternative approach is:
+
+Compute the global minimum of the max_list. Let's call it global_min.
+
+Compute the global_min_count: how many times global_min appears in the max_list.
+
+For each i, if the max_list[i] is not equal to global_min, then the minimum of the list excluding i is global_min.
+
+Otherwise, if the max_list[i] is equal to global_min, then we need to check if there is at least one other element in the max_list that is equal to global_min. If yes, then the minimum of the list excluding i is still global_min. If not, then the minimum is the second smallest element in the list.
+
+But how can we compute this?
+
+Let's think. For example, for each i, the min of max_list excluding i-th element is:
+
+if max_list[i] is not the global_min, then the min is global_min.
+
+else, if there are at least two elements equal to global_min, then the min is still global_min.
+
+else, it's the second smallest value in the list.
+
+But how can we compute this for each i?
+
+But for the purpose of checking whether sorted_min_i is less than this value, perhaps there's a better way.
+
+Let me think. For each i, we need to check if sorted_min_i is less than the minimum of all max_list except for the i-th element.
+
+But for this, the minimum of all max_list except i-th element is the same as the minimum between the original min (global_min) and the next min if the i-th element is the global_min.
+
+So, here's a plan:
+
+1. Precompute for each word, the sorted_min and sorted_max.
+
+2. Create a list max_list containing sorted_max for all words.
+
+3. Find the global_min of max_list.
+
+4. Find the count of how many times global_min appears in max_list.
+
+5. For each i:
+
+   a. If the max_list[i] is not equal to global_min: then the min of the list excluding i is global_min.
+
+   b. Else, if the count of global_min in max_list is more than 1: then the min of the list excluding i is still global_min.
+
+   c. Else: the min of the list excluding i is the second_min, which is the second smallest value in max_list.
+
+So, for each i, the min of the list excluding i is:
+
+if max_list[i] is not global_min, then global_min.
+
+else, if there are multiple global_mins, then global_min.
+
+else, the second_min.
+
+Then, for each i, we check if sorted_min_i is less than this value.
+
+But how do we compute the second_min?
+
+Well, we can compute the first and second minimum of the max_list.
+
+So, for example, first_min is the global_min. Then, the second_min is the smallest element in the list that is not equal to first_min. But if all elements are equal to first_min, then second_min is also first_min.
+
+But for the case where the i-th element is the only one with the first_min, then the min of the list excluding i is the second_min.
+
+So, the steps would be:
+
+Compute first_min and second_min of the max_list.
+
+For each i:
+
+if max_list[i] != first_min:
+
+   then the min of the list excluding i is first_min.
+
+else:
+
+   if the count of first_min in the list is more than 1:
+
+      then the min of the list excluding i is first_min.
+
+   else:
+
+      the min of the list excluding i is second_min.
+
+Once we have that, then for each i, we can check if sorted_min_i is less than this value.
+
+But how do we compute first_min, second_min, and their counts?
+
+Let me think. For example, for the list max_list, we can find the first and second minimum values. Also, count the number of elements equal to first_min.
+
+Let me think of an example:
+
+max_list = [3, 1, 1, 2]
+
+Then first_min is 1, second_min is 1. But the count of first_min is 2.
+
+Another example:
+
+max_list = [5, 5, 5]. first_min is 5, second_min is 5, count is 3.
+
+Another example: max_list = [3, 2, 2, 4]. first_min is 2, second_min is 2.
+
+So, for the case where the i-th element is the only first_min, then the second_min is the next smallest value in the list.
+
+So, how to compute first_min, second_min, and count of first_min?
+
+We can do it by:
+
+Initialize first_min as infinity, second_min as infinity.
+
+Loop through all elements in max_list:
+
+for each element in max_list:
+
+   if element < first_min:
+
+      second_min = first_min
+
+      first_min = element
+
+   elif element < second_min:
+
+      second_min = element
+
+But this approach would not account for duplicates. For example, if the list has multiple elements equal to first_min, then the second_min would be first_min.
+
+But for the count, we can count how many times first_min appears.
+
+So, after computing first_min, we can count how many times it appears in the list.
+
+So, once we have first_min, second_min, and count_first_min, then for each i:
+
+if the max_list[i] is not first_min:
+
+   current_min = first_min
+
+else:
+
+   if count_first_min > 1:
+
+      current_min = first_min
+
+   else:
+
+      current_min = second_min
+
+Then, check if sorted_min_i < current_min.
+
+If yes, then the answer for i is 1, else 0.
+
+But wait, what if the current_min is the same as the sorted_min_i? For example, if sorted_min_i is equal to current_min. Then, it's not less than, so the answer is 0. Because the problem requires that the i-th word's rearranged version is smaller than all others.
+
+So, the condition is sorted_min_i < current_min.
+
+But how to compute first_min and second_min?
+
+Let me think of code steps.
+
+First, for each word, sorted_min is the sorted list in ascending order. For example, 'banana' would be sorted as 'aabbnn'.
+
+sorted_max is sorted in descending order. For example, 'aabbnn' sorted descendingly would be 'nnbaaa'.
+
+Once all sorted_min and sorted_max are computed, create max_list as a list of sorted_max for each word.
+
+Then compute first_min and second_min.
+
+But wait, the sorted_max for each word is a string. Comparing strings lexicographically is the same as comparing their lex order. So, for example, the max_list is a list of strings. So, the first_min is the lex smallest string in max_list.
+
+So, the code for first_min and second_min can be done by comparing the strings lex order.
+
+But how to compute first_min and second_min in the list of strings?
+
+Well, for the list of strings, the first_min is the lex smallest, and the second_min is the lex smallest among the strings that are not the first_min. Or, if there are multiple first_mins, then the second_min is also first_min.
+
+So, the code for that could be:
+
+Initialize first_min as the first element of the list, then iterate through the rest to find the first_min.
+
+But perhaps it's easier to sort the list and then take the first and second elements. But for large n, this could be O(n log n), but given that n can be up to 3000, it's acceptable.
+
+So, for example, the max_list is a list of strings. Let's sort it in lex order. Then, the first_min is the first element. The second_min is the second element. But if there are multiple elements equal to first_min, then the second_min is also first_min.
+
+But then, how to compute the count of first_min in the list?
+
+Once sorted, we can count the number of occurrences of first_min in the list.
+
+But perhaps, in the sorted list, all elements that are equal to first_min are grouped together.
+
+So, for example, after sorting, the list is in order, and all elements equal to first_min are consecutive.
+
+So, the code steps:
+
+sorted_max_list = sorted(max_list)
+
+first_min = sorted_max_list[0]
+
+count_first_min = 0
+
+for s in sorted_max_list:
+
+    if s == first_min:
+
+        count_first_min +=1
+
+    else:
+
+        break
+
+But this will count all the elements in the sorted list that are equal to first_min. Because the list is sorted, all the same elements are grouped.
+
+So, for example, if the sorted_max_list is ['a', 'a', 'a', 'b', 'c'], then count_first_min is 3.
+
+Then, the second_min is the first element in the list after the first_min elements. If there are no such elements, then the second_min is first_min.
+
+So, if the count_first_min is equal to the length of the list, then second_min is first_min. Else, the second_min is sorted_max_list[count_first_min].
+
+So, for the code:
+
+sorted_max_list = sorted(max_list)
+
+first_min = sorted_max_list[0]
+
+count_first_min = 0
+
+for s in sorted_max_list:
+
+    if s == first_min:
+
+        count_first_min +=1
+
+    else:
+
+        break
+
+if count_first_min == len(sorted_max_list):
+
+    second_min = first_min
+
+else:
+
+    second_min = sorted_max_list[count_first_min]
+
+Now, for each i, the current_min is computed as follows:
+
+if max_list[i] != first_min:
+
+    current_min = first_min
+
+else:
+
+    if count_first_min > 1:
+
+        current_min = first_min
+
+    else:
+
+        current_min = second_min
+
+Once we have current_min, we need to check if sorted_min_i < current_min.
+
+But what about the case where the current_min is the same as sorted_min_i? Then, it's not less than, so the answer is 0.
+
+So, for each i, we can check if sorted_min_i < current_min. If yes, then output 1, else 0.
+
+But wait, what about when there are multiple words with the same first_min? Let me take an example.
+
+Suppose there are two words, each with sorted_max as 'a' and 'a'. Then, the first_min is 'a', count_first_min is 2. For each i, the current_min is first_min. So, sorted_min_i must be less than 'a'.
+
+But for each word, sorted_min_i is the minimal arrangement of the word. So, if sorted_min_i is 'a', then it's not less than current_min (which is 'a'), so the answer for that i would be 0. But if the sorted_min_i is less than 'a', then it's okay.
+
+But in reality, the max_list for the other word is 'a', so when we check for i, current_min is 'a' (since count_first_min is 2, so even if i is the first element, the current_min is 'a'). So, the sorted_min_i must be less than 'a' to be acceptable. But that's impossible, since sorted_min_i is the minimal arrangement of the word. So for example, if the word is 'a', then its sorted_min is 'a', and the sorted_max is 'a'. So, for i=1, the current_min is 'a' (since for j != i, which is j=2, the max_list[j] is 'a'). So sorted_min_i is 'a' and current_min is 'a' (the min of the other elements). So, the check is 'a' < 'a'? No, so the answer is 0. Which is correct, because even though the sorted_min_i is the same as the other's max, we need to have it less than all others. So, in this case, it's not possible. 
+
+Therefore, this approach seems correct.
+
+Now, the steps for the code:
+
+1. Read n and m.
+
+2. Read the n words.
+
+3. For each word, compute sorted_min and sorted_max.
+
+   For example, for a word w, sorted_min is ''.join(sorted(w)), and sorted_max is ''.join(sorted(w, reverse=True)).
+
+4. Create a list max_list which contains the sorted_max for each word.
+
+5. Sort the max_list, and compute first_min, count_first_min, and second_min as discussed.
+
+6. For each i in 0..n-1:
+
+   a. current_min = ?
+
+   b. Check if the sorted_min_i (for word i) is less than current_min.
+
+   c. If yes, output '1', else '0'.
+
+But how to compute the current_min for each i?
+
+For each i, check whether max_list[i] is equal to first_min.
+
+So, the code:
+
+sorted_max_list = sorted(max_list)
+
+first_min = sorted_max_list[0]
+
+count_first_min = 0
+
+for s in sorted_max_list:
+
+    if s == first_min:
+
+        count_first_min +=1
+
+    else:
+
+        break
+
+if count_first_min == len(sorted_max_list):
+
+    second_min = first_min
+
+else:
+
+    second_min = sorted_max_list[count_first_min]
+
+Then, for each i:
+
+original_max_i = max_list[i]
+
+if original_max_i != first_min:
+
+    current_min = first_min
+
+else:
+
+    if count_first_min > 1:
+
+        current_min = first_min
+
+    else:
+
+        current_min = second_min
+
+Then, check if sorted_min_i < current_min.
+
+But wait, the current_min is the minimum of all max_list elements except for i-th element.
+
+So, for example, in the case where the i-th element is the only first_min, then current_min is the second_min.
+
+But how to get the max_list[i]?
+
+Yes, the max_list is a list of the sorted_max for each word. So, for each i, we can check if max_list[i] is equal to first_min.
+
+Now, the code can be written as follows.
+
+But let's test with the sample input.
+
+Sample Input 1:
+
+Let me look at the first example.
+
+Sample Input 1:
+
+Assume the input is:
+
+n=4, m=7.
+
+The words are:
+
+bananaa (maybe?)
+
+But the example explanation says that for the first word, it's already the smallest. Let's think of the words as:
+
+Let me see the example explanation for the first sample.
+
+In the example explanation, the first word is already the lex smallest. So for i=1, the answer is 1.
+
+But according to our approach:
+
+For each word, compute sorted_min and sorted_max.
+
+For example, for the first word, let's say it's 'bananaa' (but the actual words may vary). Let's suppose that the first word's sorted_min is the minimal possible, and for other words, their max_list elements are larger.
+
+But let's take the example given in the first example explanation.
+
+But perhaps the example input is:
+
+For example, the words are:
+
+word1: 'a', word2: 'b', word3: 'c', word4: 'd'.
+
+But in the sample explanation, the fourth word can't be the smallest.
+
+But let's think of the sample input as:
+
+Sample Input:
+
+n=4, m=7.
+
+words:
+
+word1: 'abandon' (but perhaps not. The sample explanation says that for the second word, after some swaps, it becomes the smallest. But for the first example, the first word is already the smallest.)
+
+But perhaps the actual sample input is not given here. However, the code should handle the cases.
+
+But regardless, the approach seems correct.
+
+Now, considering that the code can be written.
+
+But let's think about edge cases.
+
+Case where n=1: output is 1.
+
+Another case where two words. For example:
+
+word1: 'a', word2: 'b'.
+
+sorted_min for word1 is 'a', sorted_max is 'a'.
+
+sorted_min for word2 is 'b', sorted_max is 'b'.
+
+max_list is ['a', 'b'].
+
+sorted_max_list is ['a', 'b'].
+
+first_min is 'a', count_first_min is 1.
+
+second_min is 'b'.
+
+For i=0: max_list[i] is 'a', which is first_min. count_first_min is 1, so current_min is second_min 'b'.
+
+Check sorted_min_i (which is 'a') < 'b'? Yes. So output 1.
+
+For i=1: max_list[i] is 'b' != first_min. current_min is first_min 'a'. sorted_min_i is 'b' < 'a'? No. So output 0. So the output is '10'.
+
+Which is correct, since for i=0, the word can be arranged to be 'a', and the other word can be arranged to be 'b', which is larger. So the first word is the smallest. For i=1, the word is 'b', and the other word is 'a', so can't be made smaller than 'a'.
+
+Another case: two words with same sorted_max. For example:
+
+word1: 'a', word2: 'a'. But according to the problem statement, all words are distinct. So this is not possible. So the words are distinct, but their sorted_max could be same.
+
+Wait, no. Because the words are distinct, but their sorted_max could be same. For example, words 'ab' and 'ba' have same sorted_max 'ba' and sorted_max 'ba' (since sorted_max is sorted in reverse order. Wait, sorted_max for 'ab' is 'ba', and for 'ba' is also 'ba'. So the max_list for these two words would be ['ba', 'ba'].
+
+So, for each i:
+
+sorted_min for each word is 'ab' and 'ab' (sorted in ascending order). So for each i, sorted_min_i is 'ab'.
+
+The max_list is ['ba', 'ba'].
+
+sorted_max_list is ['ba', 'ba'].
+
+first_min is 'ba', count_first_min is 2.
+
+second_min is 'ba'.
+
+For i=0:
+
+original_max_i is 'ba' == first_min. count_first_min is 2>1, so current_min is 'ba'.
+
+Check sorted_min_i 'ab' < 'ba'? Yes. So output 1.
+
+Same for i=1. So the output is '11'.
+
+But what's the actual scenario? For each word, can they be arranged to be the smallest?
+
+For i=0, we need to arrange the words such that the i-th word is the smallest. So the i-th word can be arranged as 'ab', and the other word can be arranged as 'ba'. So 'ab' is smaller than 'ba', so it's possible. Similarly for the other word. So the output is correct.
+
+Another case: n=2, words 'ab' and 'aa'.
+
+sorted_min for 'ab' is 'ab', sorted_max is 'ba'.
+
+sorted_min for 'aa' is 'aa', sorted_max is 'aa'.
+
+max_list is ['ba', 'aa'].
+
+sorted_max_list is ['aa', 'ba'].
+
+first_min is 'aa', count_first_min is 1. second_min is 'ba'.
+
+For i=0:
+
+original_max_i is 'ba' != first_min. So current_min is first_min 'aa'.
+
+Check sorted_min_i 'ab' < 'aa'? No. So output 0.
+
+For i=1: original_max_i is 'aa' == first_min. count_first_min is 1. So current_min is second_min 'ba'.
+
+Check sorted_min_i is 'aa' < 'ba'? Yes. So output 1.
+
+So the output is '01'.
+
+Which is correct. Because for i=1, the word can be arranged as 'aa', and the other word can be arranged as 'ba', which is larger. So it's possible. For i=0, the word is 'ab' and the other is 'aa' (sorted_max is 'aa'). So the sorted_min_i is 'ab' which is larger than the current_min (which is 'aa'). So it's not possible.
+
+Thus, the approach seems correct.
+
+Now, the code steps.
+
+Now, the code needs to handle:
+
+- For each word, compute sorted_min and sorted_max.
+
+- For the max_list, compute sorted_max_list, then first_min, count_first_min, second_min.
+
+Now, the code can be written in Python.
+
+But what about the time complexity?
+
+For n=3000, m=3000, each word is O(m log m) for sorting. For 3000 words, that's O(3000 * m log m). For m=3000, that's 3000 * 3000 log 3000. Which is acceptable? Well, 3000^2 is 9 million, and log 3000 is about 11, so 9 million * 11 = 99 million operations. Which is acceptable for Python.
+
+Then, the rest steps are O(n) time.
+
+So, code steps:
+
+Read n and m.
+
+Read n words into a list.
+
+Compute for each word, sorted_min and sorted_max.
+
+Compute max_list = [sorted_max for each word]
+
+sorted_max_list = sorted(max_list)
+
+Compute first_min, count_first_min, second_min.
+
+Then, for each i in 0..n-1:
+
+   if max_list[i] != first_min:
+
+       current_min = first_min
+
+   else:
+
+       if count_first_min > 1:
+
+           current_min = first_min
+
+       else:
+
+           current_min = second_min
+
+   if sorted_min_i < current_min:
+
+       output '1'
+
+   else:
+
+       output '0'
+
+But how to compute the sorted_max_list, first_min, etc.
+
+Now, code:
+
+Implementing in Python.
+
+But in Python, the sorted function can be used. For example, sorted_max_list = sorted(max_list). But since the elements are strings, comparing them lexicographically is correct.
+
+So:
+
+for each word in the list of words:
+
+sorted_min = ''.join(sorted(word))
+
+sorted_max = ''.join(sorted(word, reverse=True))
+
+max_list = [sorted_max for word in words]
+
+Then, sorted_max_list = sorted(max_list)
+
+Then, first_min is sorted_max_list[0], then count_first_min is the number of elements equal to first_min in the sorted_max_list.
+
+But in code:
+
+sorted_max_list = sorted(max_list)
+
+first_min = sorted_max_list[0]
+
+count_first_min = 0
+
+for s in sorted_max_list:
+
+    if s == first_min:
+
+        count_first_min +=1
+
+    else:
+
+        break
+
+if count_first_min == len(sorted_max_list):
+
+    second_min = first_min
+
+else:
+
+    second_min = sorted_max_list[count_first_min]
+
+Once that is done, for each i:
+
+original_max_i = max_list[i]
+
+if original_max_i != first_min:
+
+    current_min = first_min
+
+else:
+
+    if count_first_min > 1:
+
+        current_min = first_min
+
+    else:
+
+        current_min = second_min
+
+Then compare sorted_min_i < current_min.
+
+But for the case where the sorted_min_i is equal to current_min, it's not less, so output 0.
+
+Now, let's code this.
+
+But for the case when n=1, the output is '1'.
+
+Because in that case, the code will have max_list with one element. sorted_max_list is same as that. Then, for i=0, original_max_i is first_min. count_first_min is 1. So current_min is second_min. But in the code:
+
+count_first_min is 1. Then, since count_first_min == len(sorted_max_list) (which is 1), second_min is first_min.
+
+So, current_min is second_min, which is first_min. Then, compare sorted_min_i < current_min. For n=1, the sorted_min_i is the same as the sorted_max of the word. So for the code, the current_min is first_min. So sorted_min_i (which is the sorted_min of the word) is compared to current_min (which is the same as sorted_max of the word). But for the word, sorted_min is the lex smallest possible, which is the same as the sorted_max only if the word is of length 1. For example, if the word is 'a', sorted_min and sorted_max are 'a'. So the code would compare 'a' < 'a'? Which is false. But according to the problem statement, when n=1, it's automatically satisfied. So the code needs to handle this.
+
+Ah, here's a problem. Because in the code, when n=1, the code would compute for i=0, current_min as first_min, which is the same as the sorted_max of the word. Then, compare sorted_min_i (which is the same as sorted_max) < current_min (same as sorted_max). So the code returns 0, but according to the problem statement, for n=1, the answer is 1.
+
+So, the code needs to handle this case.
+
+So, how to handle the case when n=1?
+
+We need to check if n ==1. In that case, output '1'.
+
+So, the code needs to handle this as a special case.
+
+So, the code steps:
+
+if n == 1:
+
+    output '1'
+
+else:
+
+    proceed with the rest steps.
+
+But what about when n=1?
+
+In that case, the code's logic for current_min would be:
+
+max_list is [sorted_max of the word], sorted_max_list is same. first_min is that. count_first_min is 1. second_min is first_min. Then, for i=0, original_max_i is first_min. count_first_min is 1. So current_min is second_min which is first_min. Then compare sorted_min_i (which is the same as sorted_max) < current_min. Which is False. So the code would output 0, but according to the problem statement, it should be 1.
+
+So, the code needs to handle this case.
+
+So, the code must check for n=1 and output '1'.
+
+So, the code:
+
+if n == 1:
+
+    print('1')
+
+else:
+
+    proceed with the rest steps.
+
+So, in the code, after reading the words, check if n is 1.
+
+So, that's an important edge case.
+
+Another case: when n=2, and the sorted_min_i is equal to current_min.
+
+For example, words are 'ab' and 'ac'.
+
+sorted_min for 'ab' is 'ab', sorted_max is 'ba'.
+
+sorted_min for 'ac' is 'ac', sorted_max is 'ca'.
+
+max_list is ['ba', 'ca'].
+
+sorted_max_list is ['ba', 'ca'].
+
+first_min is 'ba', count_first_min is 1. second_min is 'ca'.
+
+For i=0:
+
+original_max_i is 'ba' == first_min. count_first_min is 1. So current_min is 'ca'.
+
+Check if 'ab' < 'ca'? Yes. So output 1.
+
+For i=1:
+
+original_max_i is 'ca' != first_min. current_min is 'ba'.
+
+Check if 'ac' < 'ba'? Yes. So output 1.
+
+So output is '11'.
+
+Which is correct. Because for each word, they can be arranged as their minimal and others as their maximal.
+
+So, the code works.
+
+But for the case when n=1, we have to output '1'.
+
+So, the code will handle that.
+
+So, now, the code steps.
+
+Now, let's code.
+
+So, the code:
+
+Read n and m.
+
+words = [input().strip() for _ in range(n)]
+
+if n ==1:
+
+    print('1')
+
+else:
+
+    compute sorted_min and sorted_max for each word.
+
+    max_list = [sorted_max for each word]
+
+    sorted_max_list = sorted(max_list)
+
+    compute first_min, count_first_min, second_min.
+
+    then for each word's sorted_min_i, check against current_min.
+
+    then build the output string.
+
+But how to handle the case when n=1.
+
+Now, code.
+
+Implementing this in Python.
+
+Now, code:
+
+def main():
+
+    import sys
+
+    input = sys.stdin.read().split()
+
+    n = int(input[0])
+
+    m = int(input[1])
+
+    words = input[2:2+n]
+
+    if n ==1:
+
+        print('1')
+
+        return
+
+    # compute sorted_min and sorted_max for each word
+
+    sorted_mins = []
+
+    sorted_maxs = []
+
+    for word in words:
+
+        sorted_word = ''.join(sorted(word))
+
+        sorted_mins.append(sorted_word)
+
+        sorted_maxs.append(''.join(sorted(word, reverse=True)))
+
+    max_list = sorted_maxs
+
+    sorted_max_list = sorted(max_list)
+
+    first_min = sorted_max_list[0]
+
+    count_first_min = 0
+
+    for s in sorted_max_list:
+
+        if s == first_min:
+
+            count_first_min +=1
+
+        else:
+
+            break
+
+    if count_first_min == len(sorted_max_list):
+
+        second_min = first_min
+
+    else:
+
+        second_min = sorted_max_list[count_first_min]
+
+    res = []
+
+    for i in range(n):
+
+        original_max_i = max_list[i]
+
+        if original_max_i != first_min:
+
+            current_min = first_min
+
+        else:
+
+            if count_first_min > 1:
+
+                current_min = first_min
+
+            else:
+
+                current_min = second_min
+
+        if sorted_mins[i] < current_min:
+
+            res.append('1')
+
+        else:
+
+            res.append('0')
+
+    print(''.join(res))
+
+But wait, what if the sorted_max_list is empty? No, since n >=2.
+
+But for n=1, we have handled it.
+
+Now, let's test the first sample.
+
+Sample Input 1:
+
+n=4, m=7.
+
+Assuming the words are as in the example explanation.
+
+But the sample output is '1110' according to the example explanation.
+
+But let's think of the code.
+
+But for the code, the sorted_mins are the sorted words in ascending order.
+
+For each word, the code checks if the sorted_min of the word is less than the current_min.
+
+Now, for the fourth word in the example, the code would check if sorted_min_i is less than current_min.
+
+But according to the example, it's not possible. So, the code returns 0 for that.
+
+But how?
+
+In the example explanation, the fourth word can't be the smallest. So, in the code, for that i, the sorted_min_i is compared to current_min, which is the minimum of the max_list excluding i-th element.
+
+If for that i, the sorted_min_i is not less than current_min, then the output is 0.
+
+Thus, the code should handle that.
+
+But how to handle the case where the current_min is the same as the sorted_min_i?
+
+For example, if the sorted_min_i is equal to current_min, then it's not less than, so output 0.
+
+Now, the code should work.
+
+But what about when there are multiple first_min?
+
+For example, if two words have their max_list elements as the same first_min.
+
+Then, for each i, current_min is first_min. So, sorted_min_i must be less than first_min.
+
+But what if sorted_min_i is equal to first_min?
+
+In that case, the code returns 0.
+
+But for example, if a word's sorted_min is the same as the first_min of the max_list, then it's possible that the other words have max_list elements that are the same as the first_min.
+
+But then, for the current_min, which is first_min, the sorted_min_i is equal to current_min, so the code returns 0.
+
+But what if the sorted_min_i is less than first_min?
+
+Well, that's possible only if the sorted_min_i is less than the first_min of the max_list.
+
+But how can that be?
+
+Because the first_min of the max_list is the minimal possible max of all words. So, for example, if a word's sorted_min is less than the first_min of the max_list, then the sorted_min_i is less than the first_min of the max_list.
+
+But the first_min of the max_list is the minimal of all max_list elements. So, for example, the max_list elements are the sorted_max of each word. So, for a word's sorted_max, which is the sorted in reverse order. So, for example, for the word 'a', its sorted_max is 'a'. For another word 'b', sorted_max is 'b'. So, the first_min is 'a'.
+
+If a word has sorted_min 'a' (which is the same as the first_min of the max_list), then the code would check if 'a' < current_min (which is first_min 'a') → no. So output 0.
+
+But what if the word's sorted_min is 'a', and the current_min is 'a', but there's another word j whose max_list is 'a'. Then, the code would check if the sorted_min_i is less than current_min, which is 'a', but 'a' is not less than 'a', so output 0.
+
+But in reality, for the i-th word, the sorted_min_i is 'a', and the other words have max_list elements that are 'a'. So, can the i-th word be rearranged to be smaller than the others?
+
+No. Because the other words can be arranged to be their max_list (which is 'a'), so the i-th word's sorted_min is 'a', which is the same as the others. Thus, it's not possible for the i-th word to be the smallest. So the code is correct.
+
+Thus, the code seems correct.
+
+Now, testing the sample input.
+
+But since the sample input is not given, but according to the example explanation, the code should produce '1110' for the first example.
+
+Another test case is when n=2, words are 'a' and 'b'.
+
+max_list is ['a', 'b'].
+
+sorted_max_list is ['a', 'b'].
+
+first_min is 'a', count_first_min is 1. second_min is 'b'.
+
+For i=0: original_max_i is 'a' == first_min. count_first_min is 1. So current_min is 'b'. Check sorted_min_i is 'a' < 'b' → yes. So output 1.
+
+For i=1: original_max_i is 'b' != first_min. current_min is 'a'. Check sorted_min_i is 'b' < 'a'? No. So output 0. So output is '10'.
+
+Which is correct.
+
+Another test case: n=2, words 'ab' and 'ba'.
+
+sorted_mins are 'ab' and 'ab'.
+
+sorted_maxs are 'ba' and 'ba'.
+
+max_list is ['ba', 'ba'].
+
+sorted_max_list is ['ba', 'ba'].
+
+first_min is 'ba', count_first_min is 2. second_min is 'ba'.
+
+For i=0: original_max_i is 'ba' == first_min. count_first_min is 2>1 → current_min is 'ba'. Check sorted_min_i is 'ab' < 'ba' → yes. So output 1.
+
+For i=1: same as i=0. So output is '11'.
+
+Which is correct.
+
+Another test case: n=2, words 'ab' and 'aa'.
+
+sorted_mins are 'ab' and 'aa'.
+
+sorted_maxs are 'ba' and 'aa'.
+
+max_list is ['ba', 'aa'].
+
+sorted_max_list is ['aa', 'ba'].
+
+first_min is 'aa', count_first_min is 1. second_min is 'ba'.
+
+For i=0: original_max_i is 'ba' != first_min → current_min is 'aa'. sorted_min_i is 'ab' < 'aa'? No → output 0.
+
+For i=1: original_max_i is 'aa' == first_min. count_first_min is 1 → current_min is 'ba'. sorted_min_i is 'aa' < 'ba' → yes → output 1.
+
+So output is '01'.
+
+Which is correct.
+
+Thus, the code seems to handle the cases.
+
+Now, for the code, the code should handle all cases, including n=1.
+
+So, the code should be correct.
+
+Now, let's code this in Python.
+
+But in Python, the sorted function for strings will compare lexicographically, which is correct.
+
+Another thing to note is that when the words are read, the input is read as split() by whitespace, but the input may have multiple lines. For example, the first line is n and m, then next n lines are the words. So, when using sys.stdin.read().split(), the input will split all tokens, including the newlines. So, for example, if the input is:
+
+4 7
+
+bananaa
+
+abandon
+
+baannaa
+
+notnotn
+
+Then, input will be ['4', '7', 'bananaa', 'abandon', 'baannaa', 'notnotn'].
+
+So, for the code, input[0] is n, input[1] is m, then words are input[2: 2+n].
+
+Yes, this is correct.
+
+Thus, the code should be correct.
+</think>
+
+To solve this problem, we need to determine if each word in a given dictionary can be rearranged such that it becomes the lexicographically smallest word compared to all other words in the dictionary. The solution involves checking if each word can be rearranged to be smaller than the maximum possible rearrangement of every other word.
+
+### Approach
+1. **Sorting Words**: For each word, compute its minimum and maximum possible lexicographical order by sorting the characters in ascending and descending order, respectively.
+2. **Max List**: Create a list of maximum possible rearrangements (sorted in descending order) for all words.
+3. **Determine Minimum Values**: Compute the smallest and second smallest values from the list of maximum rearrangements. This helps in efficiently determining if a word can be rearranged to be the smallest.
+4. **Check Feasibility**: For each word, check if its minimum possible rearrangement is smaller than the smallest maximum rearrangement of all other words. This involves comparing the minimum rearrangement of the current word against the smallest possible maximum rearrangement of the remaining words.
+
+### Solution Code
+```python
+def main():
+    import sys
+    input = sys.stdin.read().split()
+    n = int(input[0])
+    m = int(input[1])
+    words = input[2:2+n]
+    
+    if n == 1:
+        print('1')
+        return
+    
+    sorted_mins = []
+    sorted_maxs = []
+    for word in words:
+        sorted_word = ''.join(sorted(word))
+        sorted_mins.append(sorted_word)
+        sorted_maxs.append(''.join(sorted(word, reverse=True)))
+    
+    max_list = sorted_maxs
+    sorted_max_list = sorted(max_list)
+    
+    first_min = sorted_max_list[0]
+    count_first_min = 0
+    for s in sorted_max_list:
+        if s == first_min:
+            count_first_min += 1
+        else:
+            break
+    
+    if count_first_min == len(sorted_max_list):
+        second_min = first_min
+    else:
+        second_min = sorted_max_list[count_first_min]
+    
+    res = []
+    for i in range(n):
+        original_max_i = max_list[i]
+        if original_max_i != first_min:
+            current_min = first_min
+        else:
+            if count_first_min > 1:
+                current_min = first_min
+            else:
+                current_min = second_min
+        if sorted_mins[i] < current_min:
+            res.append('1')
+        else:
+            res.append('0')
+    
+    print(''.join(res))
+
+if __name__ == "__main__":
+    main()
+```
+
+### Explanation
+1. **Reading Input**: The input is read and split into individual components for processing.
+2. **Special Case Handling**: If there's only one word, it trivially satisfies the condition and returns '1'.
+3. **Sorting Words**: Each word is sorted to determine its minimum and maximum possible lexicographical order.
+4. **Max List and Sorting**: The maximum possible rearrangements of all words are stored in a list, which is then sorted to determine the smallest and second smallest values.
+5. **Feasibility Check**: For each word, check if its minimum possible rearrangement is smaller than the smallest possible maximum rearrangement of the other words. This is done by comparing against the smallest and second smallest values from the sorted list of maximum rearrangements.
+
+This approach ensures that we efficiently determine if each word can be rearranged to be the smallest, leveraging sorting and comparison techniques to handle large input sizes effectively.

@@ -1,12 +1,14 @@
 # Iteration-10 — the goldilocks dose + cap control (LR 5e-5, 32k cap)
 
-> **Status: RUNNING (2026-07-01). NB — cap is 24k, not 32k: 32k does not fit at G=16 on one H200** (a
-> memory vise — 0.20 util OOMs the loss step's per-sequence logits, 0.15 starves vLLM init; G doesn't
-> help; max ~23k at safe util — see CLAUDE.md). Running **24k @ `--vllm-gpu-util 0.18`** — still a real cap
-> increase over iter-09's 20k (cuts the 25–31% early clipping) and tests the primary LR-5e-5 question.
-> iter-08 (LR 3e-5) under-dosed → null; iter-09 (LR 1e-4) over-dosed → collapse (pass@1 −0.20, length
-> 16k→3–8k). iter-10 tests the **untested middle** and a **cap increase**: **LR 5e-5** and
-> **max_completion_length 24576** (up from 20k; 32k infeasible here). Two live outcomes:
+> **Status: RUNNING (2026-07-01). NB — cap is 20k, not 32k: any cap > 20k is memory-infeasible at G=16 on
+> one H200.** Three OOMs proved it (32k/0.20 OOM, 32k/0.15 vLLM-init-starve, 24k/0.18 OOM at step 2) — the
+> ~14 GiB peak alloc is roughly cap-independent in 24–32k, so shrinking the cap doesn't help (see CLAUDE.md).
+> **Fell back to 20k @ `--vllm-gpu-util 0.20` — iter-09's proven config — which makes iter-10 the CLEANEST
+> goldilocks test: same cap as iter-09, only LR differs (1e-4 collapsed → does 5e-5?).** The cap-confound
+> question is moot here (can't raise the cap), but iter-09's clipped-ratio analysis already showed the
+> collapse ran with the cap *inactive* — so the cap was never the driver anyway. iter-08 (LR 3e-5)
+> under-dosed → null; iter-09 (LR 1e-4) → collapse. iter-10 tests the **untested middle: LR 5e-5** at
+> **max_completion_length 20480**. Two live outcomes:
 > **(A)** it moves without collapsing → a working dose *and* it exonerates the 20k cap; **(B)** it still
 > collapses at 32k → the collapse is the LR-driven self-distillation direction, not truncation → the next
 > lever is a direction guard (entropy/length), not LR.

@@ -74,5 +74,7 @@ and the trajectory says it was still degrading.**
   (32k/0.20), `ap-50tqf0gxW9GoGXZrPbUEPj` (32k/0.15), `ap-oGZwrFaZsynBSTVF13KNdX` (24k/0.18). Checkpoints:
   `sdpo-outputs:/iter10-dose/checkpoint-{2..14}`.
 - Eval: `eval_dose --no-judge --no-base --steps 6,10 --n 24` (base reused from iter-09). Judged on GB10.
+  **ckpt-6 not captured** — its eval stalled ~2.5 h on ~6 pathological looping completions (degenerate
+  collapse outputs) and was killed near-done to cap cost; verdict rests on base + ckpt-10 + the trajectory.
 - Data/figures: `reports/iteration-10/data/` (eval jsons + `iter10_train_trace.json`), `figures/`.
   ΔW via `src/adapter_delta.py`.

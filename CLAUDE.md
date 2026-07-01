@@ -149,6 +149,13 @@ Figures: `python src/generate_slides.py` (set `ITER=iteration-NN`); cross-iterat
   thing. The cpp judge can stall on a pathological completion — harden before trusting at scale.
 - **Modal:** code+data ship to a **flat `/root/app`** layout; OJBench test cases come from the
   `ojbench-data` Volume; adapters land in `sdpo-outputs` (preserve per iteration under `/iteration-NN/`).
+- **32k completion does NOT fit training at G=16 on one H200 — max ~23k at a safe util (iter-10).** It's a
+  *vise*: at `--vllm-gpu-util 0.20` the **loss step OOMs** (the per-sequence logits tensor `[1 × 32768 ×
+  vocab]` ≈ 13.7 GiB, ~4 GiB over), and at 0.15 **vLLM can't even init** (KV too small to hold the 40960
+  context, ~0.6 GiB short). **Lowering `--num-generations` does NOT help** — the OOM is per-sequence at
+  microbatch 1, which G doesn't change. From the exact 0.20 numbers, max safe completion ≈ 32768×(9.64/13.71)
+  ≈ **23k**. iter-10 runs **24k @ util 0.18** (loss-step logits ≈10.3 GiB with ~2 GiB margin; vLLM inits).
+  True 32k needs trainer logits-chunking (compute logprobs in seq-chunks) or multi-GPU (not wired).
 - **`--output-dir` MUST be prefixed `sdpo_out/<name>` or the run's checkpoints are LOST.** `train()`
   chdir's to `/root/app` but the `sdpo-outputs` volume mounts at `/root/app/sdpo_out`. A bare
   `--output-dir iter09-dose` writes to `/root/app/iter09-dose` — *off* the mount — so the periodic

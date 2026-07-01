@@ -71,15 +71,32 @@ and the trajectory says it was still degrading.**
   stopped at step 14 once the eval + the resuming length-decline showed a milder-but-real collapse (saved
   ~4 h / the remaining 16 steps).
 
-## 5b. The 32k cap control (B200) — status
-To honor the 32k spec and settle the cap confound directly, a true-32k run was launched on a **B200
-(178 GiB)** — the H200 vise (§5) is a memory limit, not a fundamental one, so a bigger GPU fits it. LR 5e-5,
-`--vllm-gpu-util 0.20`, `--output-dir sdpo_out/iter10-32k`. **Step-1 ran clean: clipped_ratio 0%** (mean
-17k, max 24k — full thinking room, vs 20k's 25–31% clipping). This tests whether the 20k cap contributed
-to the collapse: **prediction — it still collapses** (iter-09's clipped-ratio trace already showed the
-collapse ran with the 20k cap *inactive*). The canary/pass@1 result is being measured; expected to confirm
-the collapse is cap-independent, fully exonerating the cap. *(This report's goldilocks verdict does not
-depend on it — the 20k run isolates the LR cleanly.)*
+## 5b. The 32k cap control (B200) — the cap is an ACCELERANT, not just a confound (SURPRISE)
+True 32k on a **B200 (178 GiB)** (LR 5e-5, `--vllm-gpu-util 0.15`, `sdpo_out/iter10-32k`). **My prediction
+was wrong.** I expected 32k to collapse identically (cap "inactive during collapse" per iter-09). Instead:
+
+| | length @ ckpt-6 | pass@1 | pass@8 |
+|---|---|---|---|
+| base | ~16k | 0.438 | 0.863 |
+| **32k ckpt-6** | **~16k (held)** | **0.368** | **0.837** |
+| 20k ckpt-10 (5e-5) | ~8k | 0.292 | 0.776 |
+
+**At 32k the model HOLDS ~16k reasoning through step 6 — even pushing to 19k (it *wants* to think past 20k)
+— exactly where the 20k runs had already collapsed. And capability is preserved:** ckpt-6 pass@1 0.368 is
+**statistically indistinguishable from base** (paired Δ −0.069 [−0.17, +0.03]); pass@8 0.837 ≈ base 0.863.
+**Mechanism:** at 20k, 25–31% of long traces are truncated → scored as failures → SDPO's teacher-selection
+skews toward the shorter completions that finished → brevity pressure. **The cap *seeds/accelerates* the
+collapse.** Remove it and that pressure is gone for the problems the model wants to reason long on.
+
+**BUT — a delay, not a cure.** The 32k length holds ~16k to step 6, oscillates ~11–13k (steps 7–10), then
+**declines: 10.0k → 8.0k → 6.1k by step 13** — the underlying self-distillation brevity direction still
+wins, just ~6 steps later. **The cap is an accelerant; the root cause is still the SDPO direction.**
+Figure: `reports/comparison/sdpo_cap_accelerant_story.png`. Untruncated rollouts (512, n_tokens→32768)
+preserved at `sdpo-outputs:/iter10-32k/rollouts.jsonl` for study.
+
+**Implication for iter-11:** two levers now, not one — (a) **fix the reward artifact** (don't score a
+cap-truncated completion as a hard failure), and (b) the **direction guard** (entropy/length). The cap
+finding is the more presentable half: a concrete, fixable artifact that was silently feeding the collapse.
 
 ## 6. Provenance
 - Train: app `ap-BEfF2w6lynIcmI6sYdI0dc`, killed at step 14 (Gate-1). Recipe: iter-09 with **`--lr 5e-5`**

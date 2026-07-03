@@ -198,6 +198,102 @@ def find_contrast_examples(base: pd.DataFrame, trained: pd.DataFrame, k: int = 8
     return m.sort_values("ac_drop", ascending=False).reset_index()
 
 
+# ------------------------------------------------ per-problem base / trained / teacher study
+
+def steps_for_problem(rollouts: pd.DataFrame, pid: int | None = None):
+    """Which training steps each problem was sampled in (training draws ~2 problems/step)."""
+    g = rollouts.groupby("problem_id")["step"].apply(lambda s: sorted(set(int(x) for x in s)))
+    return g.to_dict() if pid is None else g.get(pid, [])
+
+
+def _summarize(source, step, d, len_col):
+    """One row: n, AC rate, verdict mix, median length/think/code for a group of completions."""
+    if len(d) == 0:
+        return {"source": source, "step": step, "n": 0}
+    vm = d.verdict.value_counts().to_dict()
+    return {"source": source, "step": step, "n": len(d),
+            "ac_rate": round((d.verdict == "AC").mean(), 2),
+            "verdicts": {k: int(v) for k, v in vm.items()},
+            "med_chars": int(d["n_chars"].median()),
+            "med_think": int(d["think_chars"].median()),
+            "med_code": int(d["code_chars"].median()),
+            **({"med_tokens": int(d[len_col].median())} if len_col in d else {})}
+
+
+def compare_sources(pid: int, rollouts: pd.DataFrame, base_eval: pd.DataFrame | None = None,
+                    steps: list | None = None) -> pd.DataFrame:
+    """For one problem, summarize BASE (untrained eval) vs TRAINED (policy rollouts @ step) vs TEACHER
+    (the teacher-eligible subset the policy distills toward @ step), across the steps it was sampled in.
+
+    Read the table top-to-bottom: does the TEACHER itself get shorter over steps (self-distillation
+    teaching brevity), and does the trained policy's AC rate fall with it?
+    """
+    rows = []
+    if base_eval is not None:
+        rows.append(_summarize("base", None, base_eval[base_eval.id == pid], "n_tokens"))
+    for s in (steps or steps_for_problem(rollouts, pid)):
+        d = rollouts[(rollouts.problem_id == pid) & (rollouts.step == s)]
+        rows.append(_summarize("trained", s, d, "n_tokens"))
+        rows.append(_summarize("teacher", s, d[d.teacher_eligible == True], "n_tokens"))  # noqa: E712
+    return pd.DataFrame(rows)
+
+
+def get_completion(pid: int, rollouts: pd.DataFrame, step: int | None = None,
+                   source: str = "teacher", base_eval: pd.DataFrame | None = None,
+                   pick: str = "representative"):
+    """Return one completion (text + metadata) for reading.
+
+    source: 'base' (from base_eval), 'trained' (any rollout @ step), 'teacher' (teacher-eligible @ step).
+    pick:   'representative' (median length among AC if any, else median), 'shortest', 'longest', 'ac', 'fail'.
+    """
+    if source == "base":
+        d = base_eval[base_eval.id == pid].copy()
+    else:
+        d = rollouts[(rollouts.problem_id == pid) & (rollouts.step == step)].copy()
+        if source == "teacher":
+            d = d[d.teacher_eligible == True]  # noqa: E712
+    if len(d) == 0:
+        return None
+    ac = d[d.verdict == "AC"]
+    if pick == "ac" and len(ac):
+        d = ac
+    elif pick == "fail":
+        d = d[d.verdict != "AC"] if (d.verdict != "AC").any() else d
+    lc = "n_tokens" if "n_tokens" in d else "n_chars"
+    if pick == "shortest":
+        r = d.loc[d[lc].idxmin()]
+    elif pick == "longest":
+        r = d.loc[d[lc].idxmax()]
+    else:  # representative = median-length (prefer an AC one)
+        pool = ac if (pick == "representative" and len(ac)) else d
+        r = pool.iloc[(pool[lc] - pool[lc].median()).abs().argsort().iloc[0]]
+    return {"source": source, "step": step, "pid": pid, "verdict": r.verdict,
+            "n_tokens": int(r.get("n_tokens", 0)) or None, "n_chars": int(r.n_chars),
+            "think_chars": int(r.think_chars), "code_chars": int(r.code_chars),
+            "feedback": r.get("feedback", None), "completion": r.completion}
+
+
+def show_study(pid: int, rollouts, base_eval, steps=None, think_chars=800, code_chars=600):
+    """Print a readable base / teacher@early / teacher@late study for one problem: the summary table,
+    then a representative completion (thinking head + code) from base and the teacher at each step."""
+    print(f"\n{'='*70}\n  loj-{pid}  —  base vs teacher-over-training\n{'='*70}")
+    print(compare_sources(pid, rollouts, base_eval, steps).to_string(index=False))
+    steps = steps or steps_for_problem(rollouts, pid)
+    picks = [("base", None)] + [("teacher", s) for s in steps]
+    for src, s in picks:
+        ex = get_completion(pid, rollouts, s, src, base_eval, pick="ac" if src == "base" else "representative")
+        if not ex:
+            continue
+        print(f"\n--- {src}" + (f" @ step {s}" if s is not None else "") +
+              f"  [{ex['verdict']}, think={ex['think_chars']}c, code={ex['code_chars']}c] ---")
+        t = ex["completion"]
+        think = t.split("</think>")[0].replace("<think>", "")
+        code = _FENCE.findall(t)
+        print("  THINK:", " ".join(think[:think_chars].split()), "…")
+        if code:
+            print("  CODE :", " ".join(code[-1][:code_chars].split()), "…")
+
+
 # ---------------------------------------------------------------- plot helpers (matplotlib)
 
 def plot_length_trajectory(traj, ax=None):

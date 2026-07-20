@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generic eval harness for gemma-4-E2B-it served behind an OpenAI-compatible
+"""Generic eval harness for a model served behind an OpenAI-compatible
 vLLM endpoint. Reports quality (accuracy) and throughput (tokens/sec).
 
 Start with: python eval_runner.py --dataset gsm8k
@@ -195,7 +195,7 @@ def main():
     p.add_argument("--top-p", type=float, default=None)
     p.add_argument("--seed", type=int, default=1234)
     p.add_argument("--base-url", default="http://localhost:8000/v1")
-    p.add_argument("--model", default="google/gemma-4-E2B-it")
+    p.add_argument("--model", default="Qwen/Qwen3-8B")
     p.add_argument("--out", default="")
     args = p.parse_args()
     if not args.out:

@@ -7,7 +7,7 @@ verbatim; only the environment is reproduced here.
 
 ONE-TIME SETUP (see MODAL.md for the walkthrough):
   modal setup                                              # browser auth
-  modal secret create huggingface HF_TOKEN=hf_xxx          # gated gemma-4 access
+  modal secret create huggingface HF_TOKEN=hf_xxx          # HF token (any gated weights)
   modal secret create wandb WANDB_API_KEY=xxx
   modal volume create ojbench-data
   modal volume put ojbench-data ojbench_data /ojbench_data # 2.7 GB test cases, once
@@ -24,7 +24,7 @@ from pathlib import Path
 
 import modal
 
-APP_NAME = "sdpo-gemma-ojbench"
+APP_NAME = "sdpo-gemma-ojbench"  # historical (gemma era) — kept: W&B + Modal billing history live under it
 PYTHON_VERSION = "3.12"
 
 SRC = Path(__file__).resolve().parent           # repo/src
@@ -103,7 +103,7 @@ VOLUMES = {
     cpu=16.0,  # dense judging is subprocess-bound + thread-parallel — give it real cores
     volumes=VOLUMES,
     secrets=[
-        modal.Secret.from_name("huggingface"),  # -> HF_TOKEN (gated gemma-4)
+        modal.Secret.from_name("huggingface"),  # -> HF_TOKEN (any gated weights)
         modal.Secret.from_name("wandb"),  # -> WANDB_API_KEY
         modal.Secret.from_name("anthropic"),  # -> ANTHROPIC_API_KEY (the LLM critic)
     ],
@@ -365,9 +365,9 @@ def evaluate(which: str):
 
     os.chdir("/root/app")
     os.environ.setdefault("WANDB_PROJECT", APP_NAME)
-    base = "google/gemma-4-E2B-it"
+    base = "Qwen/Qwen3-8B"
     serve = ["vllm", "serve", base, "--port", "8000", "--dtype", "bfloat16",
-             "--max-model-len", "36864", "--gpu-memory-utilization", "0.85",
+             "--max-model-len", "40960", "--gpu-memory-utilization", "0.85",
              "--max-num-seqs", "32"]
     if which == "sdpo":
         serve += ["--enable-lora", "--lora-modules", "sdpo=/root/app/sdpo_out",
@@ -469,7 +469,7 @@ def passk_one(which: str, languages: str = "python",
         served, tag = base, (tag or "base")
 
     srv = subprocess.Popen(serve)
-    for _ in range(240):  # 32k-ctx Qwen3 load + warmup takes longer than gemma
+    for _ in range(240):  # 32k-ctx Qwen3 load + warmup is slow
         try:
             urllib.request.urlopen("http://localhost:8000/v1/models", timeout=2)
             break
@@ -715,8 +715,8 @@ def run_eval():
 
 # ---------------------------------------------------------------------------
 # Model-parameterized pass@k — the "opportunity graph" data (pass@1..8 by
-# difficulty) for ANY base model. evaluate()/passk_one() hardcode gemma +
-# adapter semantics; this serves an arbitrary base model and runs sdpo_passk
+# difficulty) for ANY base model. evaluate() hardcodes the base+adapter eval
+# flow; this serves an arbitrary base model and runs sdpo_passk
 # concurrently against it. vLLM continuous-batches the (concurrency x n)
 # in-flight requests => concurrent generation on the served endpoint. Qwen3-8B
 # think-ON needs a HIGH token cap (8192 -> NO_CODE), so max_tokens defaults to

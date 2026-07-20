@@ -114,7 +114,7 @@ def build_teacher_messages(
 ):
     """Full teacher message(s) for one rollout (sdpo_trainer.py:287-293).
 
-    `original_prompt` is a conversational message list (gemma chat) or a plain string.
+    `original_prompt` is a conversational message list (chat format) or a plain string.
     Returns the same structure TRL appends to `local_teacher_messages`.
     """
     solution_text = format_solution(demo_text, solution_template=solution_template) if demo_text else ""

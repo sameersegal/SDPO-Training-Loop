@@ -2,7 +2,7 @@
 """Fast held-out pass@1 eval via a vLLM OpenAI endpoint, reported per language.
 
 Serve the model first (base or merged adapter) on :8000, then:
-  python sdpo_eval_vllm.py --served-model google/gemma-4-E2B-it --tag base
+  python sdpo_eval_vllm.py --served-model Qwen/Qwen3-8B --tag base
 """
 import argparse
 import json

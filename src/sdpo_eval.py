@@ -36,7 +36,7 @@ def generate(model, tok, prompt, max_new_tokens):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="google/gemma-4-E2B-it")
+    ap.add_argument("--model", default="Qwen/Qwen3-8B")
     ap.add_argument("--adapter", default=None)
     ap.add_argument("--tag", required=True)
     ap.add_argument("--max-new-tokens", type=int, default=2048)

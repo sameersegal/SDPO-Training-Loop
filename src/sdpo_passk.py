@@ -11,7 +11,7 @@ more stable AND it is the metric SDPO's `use_successful_as_teacher` exploits
 rollouts teach the failing ones).
 
 Serve the model first (base, or adapter via --enable-lora), then:
-  python sdpo_passk.py --served-model google/gemma-4-E2B-it --tag base
+  python sdpo_passk.py --served-model Qwen/Qwen3-8B --tag base
   python sdpo_passk.py --served-model sdpo --tag sdpo   # adapter via --enable-lora
 """
 import argparse

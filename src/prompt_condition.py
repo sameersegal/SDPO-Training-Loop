@@ -1,4 +1,4 @@
-"""Test whether prompt conditioning lifts base gemma on *reachable* hard problems
+"""Test whether prompt conditioning lifts the base model on *reachable* hard problems
 (the high-partial-credit WA ones identified by diagnose_hard.py).
 
 Diagnosis (loj-2442): base writes essays hunting a closed-form instead of (a)
@@ -32,7 +32,7 @@ def clip(s, n=2200):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="google/gemma-4-E2B-it")
+    ap.add_argument("--model", default="Qwen/Qwen3-8B")
     ap.add_argument("--pids", default="2442,900011")
     ap.add_argument("--n", type=int, default=6)
     ap.add_argument("--temperature", type=float, default=0.8)

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""SDPO training for Gemma-4-E2B-it on the OJBench frontier.
+"""SDPO training for Qwen3-8B on the OJBench frontier.
+
+(Iterations 01-04 trained google/gemma-4-E2B-it; we moved to the paper's in-regime
+~8B scale at iteration-05 and removed the gemma-specific code paths — see git history.)
 
 Uses TRL's experimental SDPOTrainer with our OJBench judge as the verifier
 reward. Core SDPO signal = successful rollouts in each group distilled into the
@@ -28,7 +31,7 @@ from sdpo_reprompt_guard import install_reprompt_guard  # noqa: E402
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="google/gemma-4-E2B-it")
+    ap.add_argument("--model", default="Qwen/Qwen3-8B")
     ap.add_argument("--smoke", action="store_true", help="tiny config to debug integration")
     ap.add_argument("--max-steps", type=int, default=60)
     ap.add_argument("--num-generations", type=int, default=8)
@@ -181,23 +184,19 @@ def main():
     else:
         reward = make_reward_func(which="public", timeout=6.0, reward_mode=args.reward_mode)
 
-    # Restrict LoRA to the TEXT model (language_model). gemma4's vision/audio
-    # towers wrap projections in Gemma4ClippableLinear which PEFT can't target;
-    # the text projections are plain nn.Linear. Regex => re.fullmatch in PEFT.
-    # LoRA targets are model-shape-specific. gemma4 wraps text projections under
-    # `language_model.*` (its vision/audio towers use Gemma4ClippableLinear that PEFT
-    # can't wrap); Qwen3 is a plain text decoder -> target the proj suffixes across ALL
-    # layers with no prefix. A gemma regex matches NOTHING on Qwen3 (no adapter attaches).
+    # LoRA targets: Qwen3 is a plain text decoder — target the proj suffixes across
+    # ALL layers. (The gemma-era text-tower regex that scoped these under
+    # `language_model.*` was removed with the gemma path; see git history.)
     _proj = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
-    targets = _proj if "qwen" in args.model.lower() \
-        else r".*language_model.*\.(" + "|".join(_proj) + r")$"
     peft_cfg = LoraConfig(
         r=32, lora_alpha=64, lora_dropout=0.0, bias="none", task_type="CAUSAL_LM",
-        target_modules=targets,
+        target_modules=_proj,
     )
 
     report_to = "none" if (args.no_wandb or not os.environ.get("WANDB_API_KEY")) else "wandb"
     if report_to == "wandb":
+        # Historical project name (gemma era) — kept so all iterations' runs stay
+        # in ONE W&B project; renaming would orphan the iter-01..10 history.
         os.environ.setdefault("WANDB_PROJECT", "sdpo-gemma-ojbench")
 
     # Informative run name: model · signal source · distill weight · reward mode · teacher · steps

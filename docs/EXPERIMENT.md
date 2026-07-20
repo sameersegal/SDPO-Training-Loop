@@ -1,4 +1,4 @@
-# SDPO post-training of Gemma-4-E2B-it on OJBench — Experiment Spec
+# SDPO post-training on OJBench — Experiment Spec (Qwen3-8B since iteration-05)
 
 > Status: **validated and executed.** The pipeline ran end-to-end (train → serve → eval).
 > Headline results and the noise analysis live in **[`FINDINGS.md`](./FINDINGS.md)**; the
@@ -7,7 +7,7 @@
 
 ## 1. Goal
 
-Post-train **Gemma-4-E2B-it** with **SDPO (Self-Distillation Policy Optimization)** so it
+Post-train **Qwen3-8B** (iters 01-04: Gemma-4-E2B-it) with **SDPO (Self-Distillation Policy Optimization)** so it
 gets better at competitive-programming problems, using **OJBench** as the environment.
 Measure generalization on a **held-out set** (hard + an easy/medium thermometer slice) and
 check for capability regression on **GSM8K**.
@@ -26,8 +26,13 @@ check for capability regression on **GSM8K**.
 
 ## 3. Model under test
 
-- **`google/gemma-4-E2B-it`** — dense ~2.3B effective params, multimodal arch
-  (`Gemma4ForConditionalGeneration`); we train the **text tower only**.
+- **`Qwen/Qwen3-8B`** (since iteration-05) — the SDPO paper's in-regime scale: its edge over
+  GRPO shrinks below ~8B and reverses on ~1.5B models, so the ~2B gemma was structurally
+  out-of-regime (see `knowledge/summary_sdpo_original.md`, iteration-04's teacher probe).
+- Iterations 01–04 ran **`google/gemma-4-E2B-it`** (~2.3B effective, multimodal
+  `Gemma4ForConditionalGeneration`; LoRA on the text tower only via a `language_model.*` regex).
+  Gemma-specific code paths were removed after iter-10 — see git history and the frozen
+  per-iteration reports.
 - (We earlier benchmarked `WeiboAI/VibeThinker-3B` for reference; **not** part of SDPO.)
 
 ## 4. Benchmark: OJBench
@@ -133,9 +138,8 @@ mode (where `passed` is a misleading prefix count). See `docs/design/JUDGE.md` �
 
 ## 7. Training configuration (`sdpo_train.py`)
 
-- **LoRA** (**r=32, α=64**) on the **text model only**: regex
-  `language_model.*(q|k|v|o|gate|up|down)_proj` (gemma4's vision/audio towers use
-  `Gemma4ClippableLinear`, which PEFT can't wrap — skipped).
+- **LoRA** (**r=32, α=64**) on the proj suffixes (`q|k|v|o|gate|up|down_proj`) across all
+  layers (Qwen3 plain decoder; the gemma-era `language_model.*` text-tower regex is gone).
 - `num_generations=8`, `distillation_weight=1.0`, `distillation_mode="topk_logits"`,
   `distillation_topk=100`, `teacher_model_kind="ema"`, temperature 1.0 / top_p 0.95, `lr=1e-4`, bf16.
 - `max_completion_length=8192` (training). Completions average ~3.4k tokens.
@@ -162,24 +166,23 @@ mode (where `passed` is a misleading prefix count). See `docs/design/JUDGE.md` �
 
 ## 8. Evaluation
 
-**Token budgets:** Gemma supports 128K ctx. **Eval** uses a generous **32k** completion cap
-(served at `max-model-len≈36k`) so long solutions don't truncate into false `NO_CODE`.
-**Training** keeps completions at **8k** (32k × G=8 per-token KL is memory-prohibitive; easy
-training solutions fit in 8k).
+**Token budgets:** **Eval** uses a generous **32k** completion cap (served at
+`max-model-len=40960`) so thinking-ON solutions don't truncate into false `NO_CODE` (an 8k cap
+does exactly that on Qwen3). **Training** caps completions at **20k** on 1×H200 (the proven
+ceiling — see the cap-vise gotcha in `CLAUDE.md`; 32k needs a B200).
 
-**Serving the adapter — via vLLM `--enable-lora` (NOT a merged checkpoint).** Merging the LoRA
-into gemma-4 then serving the local dir is brittle: `merge_and_unload` via `AutoModelForCausalLM`
-silently drops upper-layer `k_norm` weights (meta-device offload) → vLLM "weights not initialized".
-Instead serve base + adapter directly:
+**Serving the adapter — via vLLM `--enable-lora` (NOT a merged checkpoint).** Serve base +
+adapter on the same server for a clean delta. (Gemma-era origin of the rule: `merge_and_unload`
+silently dropped upper-layer `k_norm` weights → vLLM "weights not initialized".)
 ```bash
-vllm serve google/gemma-4-E2B-it --enable-lora --lora-modules sdpo=<adapter_dir> --max-lora-rank 32 \
-  --dtype bfloat16 --max-model-len 36864 --gpu-memory-utilization 0.85
+vllm serve Qwen/Qwen3-8B --enable-lora --lora-modules sdpo=<adapter_dir> --max-lora-rank 32 \
+  --dtype bfloat16 --max-model-len 40960 --gpu-memory-utilization 0.85
 # then pass --served-model sdpo
 ```
 
 Reported **separately for Python and C++**, pass@1 (greedy), on the **held-out** set, judged on
 **private** test cases:
-- `sdpo_eval_base*.json` — base Gemma (measure on the *same* server as the adapter for a clean delta)
+- `sdpo_eval_base*.json` — base model (measure on the *same* server as the adapter for a clean delta)
 - `sdpo_eval_sdpo.json` — after SDPO
 - Delta = post − base, per language × difficulty.
 
@@ -211,7 +214,7 @@ Code is in `src/`, committed inputs in `data/`, results in `reports/`. (Repo lay
 are in `src/` (put it on the path). `S=../../src`:
 ```bash
 # 1. baseline held-out + GSM8K (serve base):
-PYTHONPATH=$S python $S/sdpo_eval_vllm.py --served-model google/gemma-4-E2B-it --tag base --max-tokens 32768 --wandb
+PYTHONPATH=$S python $S/sdpo_eval_vllm.py --served-model Qwen/Qwen3-8B --tag base --max-tokens 32768 --wandb
 PYTHONPATH=$S python $S/eval_runner.py --dataset gsm8k --sample-frac 1.0 --out results_gsm8k_base_full.json
 # 2. train easy-only (free the GPU first):
 PYTHONPATH=$S python $S/sdpo_train.py --difficulties easy --languages python,cpp --max-steps 20 \

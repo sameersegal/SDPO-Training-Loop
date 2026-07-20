@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A **research repo**, not a product: post-train **Gemma-4-E2B-it** with **SDPO**
+A **research repo**, not a product: post-train **Qwen3-8B** with **SDPO**
 (Self-Distillation Policy Optimization, TRL's experimental `SDPOTrainer`) on **OJBench**
 competitive-programming problems, then measure generalization (held-out hard + easy/medium
 thermometer) and capability regression (GSM8K). Work proceeds **iteration by iteration**.
@@ -83,13 +83,13 @@ mkdir -p runs/iteration-NN && cd runs/iteration-NN
 S=../../src                                   # scripts live in src/
 PYTHONPATH=$S python $S/sdpo_train.py --smoke  # always smoke-test integration first
 # 1. baseline (serve base on :8000 via ../../scripts/serve.sh):
-PYTHONPATH=$S python $S/sdpo_eval_vllm.py --served-model google/gemma-4-E2B-it --tag base --max-tokens 32768 --wandb
+PYTHONPATH=$S python $S/sdpo_eval_vllm.py --served-model Qwen/Qwen3-8B --tag base --max-tokens 32768 --wandb
 PYTHONPATH=$S python $S/eval_runner.py --dataset gsm8k --sample-frac 1.0 --out results_gsm8k_base_full.json
 # 2. train easy-only (free the GPU first — see gotchas):
 PYTHONPATH=$S python $S/sdpo_train.py --difficulties easy --languages python,cpp --max-steps 20 \
   --vllm-gpu-util 0.30 --output-dir sdpo_out
 # 3. serve the ADAPTER (not a merge), then re-eval:
-vllm serve google/gemma-4-E2B-it --enable-lora --lora-modules sdpo=sdpo_out \
+vllm serve Qwen/Qwen3-8B --enable-lora --lora-modules sdpo=sdpo_out \
   --max-lora-rank 32 --dtype bfloat16 --max-model-len 36864 --gpu-memory-utilization 0.85
 PYTHONPATH=$S python $S/sdpo_passk.py --served-model sdpo --tag sdpo --wandb   # pass@k, not greedy
 ```
@@ -139,11 +139,13 @@ Figures: `python src/generate_slides.py` (set `ITER=iteration-NN`); cross-iterat
   single-stream ~13 — a GB10 LPDDR-bandwidth artifact, **NOT a general truth**). On the H200 the KV
   cache showed **~45× concurrency at 16k**, so serial would waste most of the GPU — use `--concurrent`
   there (the Modal `gen` entrypoint defaults to 12). Same rule for eval sweeps.
-- **Serve the adapter via `vllm --enable-lora`, NOT a merged checkpoint.** `merge_and_unload` on this
-  multimodal model silently drops upper-layer `k_norm` weights → vLLM "weights not initialized". Eval
-  base and adapter on the *same* server for a clean delta.
-- **LoRA targets the text tower only** — regex `.*language_model.*\.(q|k|v|o|gate|up|down)_proj$`.
-  gemma4's vision/audio towers use `Gemma4ClippableLinear` which PEFT can't wrap.
+- **Serve the adapter via `vllm --enable-lora`, NOT a merged checkpoint.** Eval base and adapter on
+  the *same* server for a clean delta. (Gemma-era origin: `merge_and_unload` on the multimodal gemma-4
+  silently dropped upper-layer `k_norm` weights → vLLM "weights not initialized". The same-server rule
+  stands regardless of model.)
+- **LoRA targets** — Qwen3 is a plain text decoder: target the proj suffixes
+  (`q|k|v|o|gate|up|down_proj`) across all layers. (The gemma-era `language_model.*` text-tower
+  regex was removed with the gemma path; see git history if it's ever needed again.)
 - **Judge is lightweight, not the official DMOJ sandbox** (DMOJ needs root + pypy3). Python = stdout
   diff; C++ = `g++ -O2 -std=c++17`. **Judge fidelity = reward fidelity** — a false AC trains the wrong
   thing. The cpp judge can stall on a pathological completion — harden before trusting at scale.

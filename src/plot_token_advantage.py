@@ -287,7 +287,7 @@ def write_cases_md(meta, results, out_md):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="google/gemma-4-E2B-it")
+    ap.add_argument("--model", default="Qwen/Qwen3-8B")
     ap.add_argument("--difficulties", default="easy,medium,hard")
     ap.add_argument("--language", default="python", choices=["python", "cpp"])
     ap.add_argument("--system", default="cp_method", choices=["cp_method", "expert", "none"])

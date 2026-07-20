@@ -1,4 +1,4 @@
-"""Diagnose HOW base gemma fails on hard OJBench problems.
+"""Diagnose HOW the base model fails on hard OJBench problems.
 
 Generates a few base rollouts per hard problem, judges each with the DENSE
 (fraction) reward so we see partial credit + the first failing case, and writes a
@@ -8,7 +8,7 @@ credit / occasional AC) vs hopeless, and (b) read where the model errs so we can
 condition the prompt.
 
 Serve base first (bump context for hard problems):
-  vllm serve google/gemma-4-E2B-it --port 8000 --dtype bfloat16 \
+  vllm serve Qwen/Qwen3-8B --port 8000 --dtype bfloat16 \
     --max-model-len 16384 --gpu-memory-utilization 0.85 --max-num-seqs 64
 Then:
   PYTHONPATH=src python src/diagnose_hard.py --n 4 --out reports/iteration-03/data/hard_rollouts.md
@@ -55,7 +55,7 @@ def select_hard_pids(k):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="google/gemma-4-E2B-it")
+    ap.add_argument("--model", default="Qwen/Qwen3-8B")
     ap.add_argument("--pids", default=None, help="comma list; else auto-select small-case train-hard")
     ap.add_argument("--k-problems", type=int, default=6, help="how many hard problems if auto-selecting")
     ap.add_argument("--n", type=int, default=4, help="rollouts per problem")
@@ -98,7 +98,7 @@ def main():
             print(f"  loj-{pid:<7} best_reward={best:.2f}  verdicts={dict(vd)}", flush=True)
 
     # ---- markdown report ----
-    lines = ["# Base gemma on hard OJBench — rollout diagnosis", "",
+    lines = ["# Base model on hard OJBench — rollout diagnosis", "",
              f"model `{args.model}` · n={args.n} · temp={args.temperature} · judged on **{args.which}** cases "
              f"· dense (fraction) reward · expert_sys={args.expert_sys}", "",
              "`reward` = fraction of test cases passed (1.00 = AC). `best` per problem tells you how "

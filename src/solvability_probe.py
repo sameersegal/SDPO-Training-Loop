@@ -33,7 +33,7 @@ import sdpo_ojbench as S
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="google/gemma-4-E2B-it")
+    ap.add_argument("--model", default="Qwen/Qwen3-8B")
     ap.add_argument("--n", type=int, default=8)
     ap.add_argument("--language", default="python")
     ap.add_argument("--temperature", type=float, default=0.8)

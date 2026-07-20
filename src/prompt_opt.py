@@ -1,4 +1,4 @@
-"""Prompt optimization on base gemma: try prompt variants on sample OJBench problems,
+"""Prompt optimization on the base model: try prompt variants on sample OJBench problems,
 generate + judge, and compare solve rates. Serve the base model on :8000 first.
 
   PYTHONPATH=src python src/prompt_opt.py --n 4 --temperature 0.6
@@ -26,7 +26,7 @@ def variants(prompt, pid):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="google/gemma-4-E2B-it")
+    ap.add_argument("--model", default="Qwen/Qwen3-8B")
     ap.add_argument("--n", type=int, default=4)
     ap.add_argument("--temperature", type=float, default=0.6)
     ap.add_argument("--max-tokens", type=int, default=8192)

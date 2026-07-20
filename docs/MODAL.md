@@ -13,8 +13,8 @@ All commands use the venv's CLI: `.venv/bin/modal` (or activate the venv first).
 # 1. Authenticate (opens a browser; needs a Modal account at modal.com)
 .venv/bin/modal setup
 
-# 2. Secrets — gated gemma-4 download + W&B logging
-#    HF token must have accepted the gemma-4 license on huggingface.co.
+# 2. Secrets — HF download (any gated weights) + W&B logging
+#    (gemma era required accepting the gemma-4 license; Qwen3-8B is ungated.)
 .venv/bin/modal secret create huggingface HF_TOKEN=hf_xxxxxxxx
 .venv/bin/modal secret create wandb WANDB_API_KEY=$(grep WANDB_API_KEY .env | cut -d= -f2)
 
@@ -27,7 +27,7 @@ All commands use the venv's CLI: `.venv/bin/modal` (or activate the venv first).
 
 ```bash
 # Smoke test first — 2 steps, validates image + data + judge end-to-end (~5-10 min,
-# most of which is the one-time gemma-4 download into the hf-cache volume).
+# most of which is the one-time model download into the hf-cache volume).
 .venv/bin/modal run src/modal_sdpo.py --smoke
 
 # Real run — the scaled experiment the GB10 can't do quickly
@@ -41,7 +41,7 @@ Flags (see `main()` in `src/modal_sdpo.py`): `--gpu` (H100/H200/A100-80GB), `--d
 ### Base-model pass@k / opportunity graph (any model)
 `passk_base` serves an arbitrary **base** model with vLLM and runs `sdpo_passk` concurrently against
 it (16-way × n=8, continuous-batched) — the pass@1→pass@8 "opportunity" data, model-parameterized
-(`evaluate`/`passk_one` hardcode gemma + adapter semantics; this doesn't).
+(`evaluate` hardcodes the base+adapter flow; this doesn't).
 ```bash
 .venv/bin/modal run src/modal_sdpo.py::passk_base --smoke              # 2 easy, n=2 — validate plumbing
 .venv/bin/modal run src/modal_sdpo.py::passk_base                      # Qwen3-8B python, 25 heldout, n=8, 32k
@@ -95,7 +95,7 @@ Flags: `--ids`, `--checkpoints` (comma volume paths), `--n`, `--temperature`, `-
 Then evaluate locally exactly as before (serve via vLLM `--enable-lora --lora-modules sdpo=./sdpo_out_modal`).
 
 ## Notes / gotchas
-- **First run is slow** — it downloads gemma-4 (~10 GB, gated) into the `hf-cache` volume; later runs reuse it.
+- **First run is slow** — it downloads the model weights (~16 GB for Qwen3-8B) into the `hf-cache` volume; later runs reuse it.
 - **Empty-data trap** — if you skip the `volume put`, every rollout scores 0 with no error. The
   function asserts the test-case dir is non-empty up front to catch this.
 - **On a dedicated GPU the GB10 memory workarounds relax** — `--vllm-gpu-util` defaults to 0.45 here

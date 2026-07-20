@@ -34,7 +34,8 @@ DATA = REPO / "data"
 # local paths keep `modal run src/modal_sdpo.py` working from any CWD.
 _CODE = ["_paths.py", "ojbench_eval.py", "sdpo_ojbench.py", "sdpo_train.py",
          "sdpo_feedback.py", "sdpo_passk.py", "sdpo_eval_vllm.py", "eval_runner.py",
-         "gen_rollouts.py", "sdpo_critic.py", "sdpo_prompts.py", "teacher_eval.py"]
+         "gen_rollouts.py", "sdpo_critic.py", "sdpo_prompts.py", "sdpo_reprompt_guard.py",
+         "teacher_eval.py"]
 _DATA = ["ojb_splits.json", "ojb_splits_full.json", "ojbench_selected.json",
          "frontier_band.json",      # iteration-07: 35 sometimes-solvable pids (n=4 probe)
          "frontier_band_v2.json"]   # iteration-08: 10 binary-frontier pids (n=12/temp-1.0 re-probe)

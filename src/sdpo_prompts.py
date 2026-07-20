@@ -34,6 +34,7 @@ KEY for iteration 02 (live per-rollout feedback): `feedbacks` is already per-ROL
 list (each completion's own judge verdict) and set include_environment_feedback=True — no
 template/loss changes needed.
 """
+import re
 from typing import Any
 
 # Copied verbatim from trl.experimental.sdpo.SDPOConfig defaults (sdpo_config.py:554-564),
@@ -41,6 +42,20 @@ from typing import Any
 DEFAULT_REPROMPT_TEMPLATE = "{prompt}{solution}{feedback}\n\nCorrectly solve the original question.\n"
 DEFAULT_SOLUTION_TEMPLATE = "\nCorrect solution:\n\n{successful_previous_attempt}\n\n"
 DEFAULT_FEEDBACK_TEMPLATE = "\nThe following is feedback from your unsuccessful earlier attempt:\n\n{feedback_raw}\n\n"
+
+
+def strip_thinking(demo_text: str) -> str:
+    """Mirror of TRL's remove_thinking_from_demonstration (sdpo_trainer.py:279-280).
+
+    The demonstration a teacher sees is a sibling's ENTIRE completion — on this task
+    10-17k tokens of <think> + ~1k of code. With max_reprompt_len=8192 and LEFT
+    truncation (ids[-N:], sdpo_trainer.py:162) an un-stripped demo overflows the cap
+    and cuts the HEAD of the context: BOS + system + the problem statement — the
+    teacher then scores rollouts against a context with no problem in it (the
+    iter-01..10 silent bug; see reports/iteration-10). Stripping <think> keeps the
+    demo to just the code, so the context always fits intact.
+    """
+    return re.sub(r"<think>.*?</think>", "", demo_text, flags=re.DOTALL).strip()
 
 
 def format_solution(demo_text: str, *, solution_template: str = DEFAULT_SOLUTION_TEMPLATE) -> str:

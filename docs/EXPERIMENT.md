@@ -147,6 +147,18 @@ mode (where `passed` is a misleading prefix count). See `docs/design/JUDGE.md` �
   `--per-device-batch`, `--no-grad-checkpointing` (only fits on ≥141 GB H200).
 - Logs to **W&B**; watch `self_distillation/success_group_fraction` (>0 ⇒ learning), `reward_mean`,
   `distillation_loss`.
+- **Teacher-context integrity (iteration-11; fixes the iter-01..10 silent bug).** The teacher's
+  reprompt is left-truncated to the last `max_reprompt_len=8192` tokens (`ids[-N:]`, after the chat
+  template). A demonstration carrying a sibling's full `<think>` block is 10–17k tokens, so the cut
+  removed the HEAD — BOS, system prompt, and the **problem statement** — and the teacher scored
+  rollouts against a malformed context (~100% of early-step solution-teachers in iter-10; a likely
+  driver of the brevity collapse: reasoning tokens unpredictable without the problem → negative
+  advantage; sibling code literally in context → preserved). Defaults now:
+  `remove_thinking_from_demonstration=True` (demo = code only, ~0.5–1k tok; context always fits;
+  revert: `--keep-demo-thinking`), feedback combines with the solution (paper's best config;
+  pre-iter-11 gating via `--feedback-only-without-solution`), and `sdpo_reprompt_guard.py` logs
+  `self_distillation/reprompt_truncated_frac` (+ len/overflow max) every step and warns loudly on
+  any overflow — **pre-flight expectation: 0**. Tests: `tests/test_reprompt_truncation.py`.
 
 ## 8. Evaluation
 
@@ -238,3 +250,7 @@ PYTHONPATH=$S python $S/eval_runner.py --dataset gsm8k --sample-frac 1.0 --model
 2. **Eval noise ≥ prototype effect** at n=25 greedy pass@1 — fix with pass@k / larger slice. [§8]
 3. **Compute reality:** a meaningful delta needs hundreds of steps, not the 20-step prototype.
 4. **Hard stays ~0** without live judge feedback — expected for a 2.3B model. [§6]
+5. **Iters 01–10 ran with a malformed teacher context** (solution-teacher prompts left-truncated
+   past the problem statement; iter-09/10 additionally ran `--feedback` OFF, so all-fail groups had
+   no teacher at all). No conclusion about "does SDPO work here" from those iterations is
+   trustworthy until re-tested under the iteration-11 fix. [§7]

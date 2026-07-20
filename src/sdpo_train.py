@@ -23,6 +23,7 @@ from trl.experimental.sdpo import SDPOConfig, SDPOTrainer  # noqa: E402
 
 from sdpo_ojbench import build_dataset, make_reward_func  # noqa: E402
 from sdpo_feedback import FeedbackSDPOTrainer, FeedbackBus, make_feedback_reward_func  # noqa: E402
+from sdpo_reprompt_guard import install_reprompt_guard  # noqa: E402
 
 
 def main():
@@ -82,6 +83,17 @@ def main():
                          "dense FRACTION. 1.0=AC-only; <1.0 (e.g. 0.5) lets near-miss rollouts teach.")
     ap.add_argument("--feedback", action="store_true",
                     help="live per-rollout judge feedback into the SDPO teacher (iteration 02)")
+    # --- teacher-context integrity (iteration-11; the iter-01..10 silent bug) ---
+    ap.add_argument("--keep-demo-thinking", action="store_true",
+                    help="keep the sibling demo's <think> block in the teacher prompt "
+                         "(pre-iter-11 behavior). A full-completion demo is 10-17k tokens, "
+                         "overflows max_reprompt_len=8192, and LEFT-truncation then cuts "
+                         "BOS+system+PROBLEM from the teacher context — the malformed-teacher "
+                         "bug behind the iter-01..10 brevity collapse. Default: strip to code.")
+    ap.add_argument("--feedback-only-without-solution", action="store_true",
+                    help="use judge feedback only when the group has NO successful demo "
+                         "(pre-iter-11 behavior). Default combines solution+feedback, the "
+                         "SDPO paper's best config (48.3%% vs either alone).")
     ap.add_argument("--critic", action="store_true",
                     help="replace deterministic feedback with an LLM trace-aligned critique "
                          "(iteration 06; implies --feedback; needs ANTHROPIC_API_KEY)")
@@ -113,6 +125,10 @@ def main():
     args = ap.parse_args()
     if args.critic:
         args.feedback = True  # the critic rewrites the live feedback signal; it needs the bus
+
+    # Teacher prompts must never be silently truncated again (iter-01..10 bug):
+    # measure + log + warn on any overflow of max_reprompt_len.
+    install_reprompt_guard()
 
     # Inject enforce_eager into TRL's colocate vLLM (it doesn't expose the flag in
     # colocate mode — only the server path does). Patch the LLM symbol TRL calls.
@@ -203,13 +219,20 @@ def main():
         teacher_model_kind=args.teacher_kind,           # "base"=fixed/initial (iteration-05 T0)
         use_successful_as_teacher=True,
         success_reward_threshold=args.sdpo_threshold,  # applied to the dense FRACTION (feedback path)
-        # Live judge feedback into the teacher. feedback-only-without-solution targets
-        # the ALL-FAIL groups (iteration-01's gap: no successful rollout -> no teacher);
-        # success groups still use the solution. This also bounds teacher-prompt length
-        # (prompt+solution OR prompt+feedback, never both) so it fits the 80 GB H100.
+        # --- teacher-context integrity (iteration-11) ---
+        # The demo is a sibling's ENTIRE completion; un-stripped it is 10-17k tokens and
+        # overflows max_reprompt_len, whose LEFT truncation (ids[-N:]) then cuts BOS+system+
+        # PROBLEM from the teacher context — the iter-01..10 malformed-teacher bug. Stripping
+        # <think> keeps the demo to code (~0.5-1k tok): problem + demo + feedback ≈ 2-3k tok,
+        # never truncated (judge feedback fields are _clip'd to 600 chars each upstream).
+        remove_thinking_from_demonstration=not args.keep_demo_thinking,
+        # Judge feedback into the teacher. Default combines solution+feedback (the paper's
+        # best config); --feedback-only-without-solution restores the pre-iter-11 gating
+        # that dropped feedback whenever a demo existed. Either way feedback still covers
+        # the ALL-FAIL groups (iteration-01's gap: no successful rollout -> no teacher).
         include_environment_feedback=args.feedback,
-        environment_feedback_only_without_solution=args.feedback,
-        max_reprompt_len=8192,
+        environment_feedback_only_without_solution=args.feedback_only_without_solution,
+        max_reprompt_len=8192,  # backstop only — the guard logs/warns if it ever binds
         # --- generation / RL ---
         num_generations=args.num_generations,
         max_completion_length=args.max_completion_length,

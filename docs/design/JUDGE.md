@@ -84,6 +84,19 @@ This text is what distinguishes **copy-only** SDPO (teacher only shows a *succes
 **live-feedback** SDPO (teacher is told *why the attempt failed*). Iteration 01 was copy-only
 (`include_environment_feedback=False`) and mode-collapsed; iteration 02 wires this feedback in.
 
+**When this feedback actually reaches the teacher (corrected in iteration-11).** Two gates sat
+between this text and the teacher, and both were mis-set in practice:
+1. `--feedback` is opt-in — **iter-09/10 ran without it**, so none of the above ever entered the
+   teacher prompt in those runs (all-fail groups had no teacher signal at all).
+2. Pre-iter-11, `environment_feedback_only_without_solution=True` dropped the feedback whenever the
+   group had an AC demo — so even with `--feedback` on, success-group teachers never saw it. The
+   paper's ablation found **solution + environment output together is the best config**; iteration-11
+   makes combined the default (`--feedback-only-without-solution` restores the old gating).
+And the demo itself was corrupted: a full-completion demonstration (10–17k tokens of `<think>`)
+overflowed `max_reprompt_len=8192`, whose left-truncation cut the **problem statement** out of the
+teacher context (see `docs/EXPERIMENT.md` §7, `sdpo_reprompt_guard.py`,
+`tests/test_reprompt_truncation.py`). Demos are now code-only (`remove_thinking_from_demonstration`).
+
 **What the teacher does NOT see (a deliberate limitation).** In an all-fail group under partial
 reward, the teacher is conditioned on **each rollout's own** feedback — *not* on the group's **best
 near-miss**. TRL only treats a rollout as a teacher *solution* when its reward ≥ `success_reward_threshold`

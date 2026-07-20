@@ -176,3 +176,96 @@ def test_guard_measures_truncation_and_slices_like_trl():
     b2 = SuccessfulRolloutTeacherContextBuilder(_Healthy())
     b2._tokenize_teacher_messages(["a", "b"])
     assert b2._reprompt_guard_stats["self_distillation/reprompt_truncated_frac"] == 0.0
+
+
+# --- the student-prompt guard (replication audit, 2026-07) --------------------
+from collections import defaultdict  # noqa: E402
+
+
+class _StubModel:
+    training = True
+
+
+class _StubTrainerForPrompts:
+    """Minimal SDPOTrainer stand-in exercising _tokenize_prompts's truncation path."""
+    max_prompt_length = 10
+    model = _StubModel()
+
+    def __init__(self, ids_list):
+        self._ids_list = ids_list
+        self._metrics = {"train": defaultdict(list), "eval": defaultdict(list)}
+
+    def _tokenize_prompts_untruncated(self, prompts):
+        return self._ids_list
+
+
+def test_student_prompt_guard_measures_and_slices():
+    from sdpo_reprompt_guard import install_reprompt_guard
+    from trl.experimental.sdpo.sdpo_trainer import SDPOTrainer
+
+    install_reprompt_guard()
+    install_reprompt_guard()  # idempotent
+
+    # over-length prompt present: one of two prompts exceeds cap=10
+    t = _StubTrainerForPrompts([[7] * 15, [7] * 5])
+    out = SDPOTrainer._tokenize_prompts(t, ["a", "b"])
+    m = t._metrics["train"]
+    assert m["prompts/student_prompt_truncated_frac"] == [pytest.approx(0.5)]
+    assert m["prompts/student_prompt_len_max"] == [15.0]
+    # original slicing preserved: ids[-cap:] applied
+    assert out == [[7] * 10, [7] * 5]
+
+    # under-length batch: no truncation -> no metrics appended, untouched ids
+    t2 = _StubTrainerForPrompts([[7] * 4, [7] * 6])
+    out2 = SDPOTrainer._tokenize_prompts(t2, ["a", "b"])
+    assert "prompts/student_prompt_truncated_frac" not in t2._metrics["train"]
+    assert out2 == [[7] * 4, [7] * 6]
+
+
+# --- sdpo_train argparse defaults match paper values (replication audit) ------
+def test_sdpo_train_paper_faithful_defaults():
+    import sdpo_train
+    ap = sdpo_train.build_parser()
+    defaults = {a.dest: a.default for a in ap._actions}
+    assert defaults["teacher_update_rate"] == 0.01     # paper best (TRL default 0.05)
+    assert defaults["distillation_alpha"] == 1.0       # reverse KL (paper's LCBv6 RUN SCRIPT + TRL
+                                                       # default; the method-section JSD=0.5 is prose-only)
+    assert defaults["distillation_topk"] == 20         # LCBv6 run K=20 (pre-replication hardcoded 100)
+    assert defaults["distillation_tail"] is True       # tail bucket on (TRL default False)
+    assert defaults["distillation_is_clip"] == "2.0"   # preserve current behavior; "none"->None at parse
+
+
+def test_sdpo_train_is_clip_none_parsing():
+    import sdpo_train
+    ap = sdpo_train.build_parser()
+    for raw in ("none", "None", "0", "0.0"):
+        args = ap.parse_args(["--distillation-is-clip", raw])
+        clip = str(args.distillation_is_clip).strip().lower()
+        assert (None if clip in ("none", "0", "0.0") else float(args.distillation_is_clip)) is None
+    args = ap.parse_args(["--distillation-is-clip", "2.0"])
+    assert float(args.distillation_is_clip) == 2.0
+
+
+def test_sdpoconfig_accepts_paper_fields():
+    try:
+        from trl.experimental.sdpo import SDPOConfig
+    except Exception as e:  # noqa: BLE001
+        pytest.skip(f"SDPOConfig import requires optional deps: {e}")
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        # distillation_mode="topk_logits" as in our real run (sdpo_train.py). alpha=0.5 here is
+        # DELIBERATE (not the 1.0 default): it keeps the JSD path covered — the config's
+        # __post_init__ rejects distillation_alpha!=1.0 ONLY in the "sampled_token" mode.
+        cfg = SDPOConfig(
+            output_dir=d,
+            distillation_mode="topk_logits",
+            distillation_topk=100,
+            teacher_update_rate=0.01,
+            distillation_alpha=0.5,
+            distillation_add_tail=True,
+            distillation_is_clip=None,
+        )
+    assert cfg.teacher_update_rate == 0.01
+    assert cfg.distillation_alpha == 0.5
+    assert cfg.distillation_add_tail is True
+    assert cfg.distillation_is_clip is None

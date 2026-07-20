@@ -20,6 +20,15 @@ Metrics added (per step, under the trainer's usual prefixes):
   self_distillation/reprompt_len_max          longest teacher prompt (tokens, pre-cut)
   self_distillation/reprompt_overflow_max     worst overflow past max_reprompt_len
 
+SECOND, SAME-CLASS HAZARD (replication audit, 2026-07): the trainer-level
+`SDPOTrainer._tokenize_prompts` (sdpo_trainer.py:981-985) left-truncates the STUDENT
+prompt ids to `max_prompt_length` (`ids[-N:]`) — the identical head-cutting bug class.
+When a student prompt (system + PROBLEM STATEMENT) overflows max_prompt_length the cut
+removes BOS/system/problem the same way. We wrap it with the same measure-before-truncate
+pattern, logging into the trainer's own per-step `_metrics[mode]`:
+  prompts/student_prompt_truncated_frac       fraction of student prompts over max_prompt_length
+  prompts/student_prompt_len_max              longest student prompt (tokens, pre-cut)
+
 Usage (sdpo_train.py does this at startup):
     from sdpo_reprompt_guard import install_reprompt_guard
     install_reprompt_guard()
@@ -27,10 +36,14 @@ Usage (sdpo_train.py does this at startup):
 The pre-flight expectation for any healthy run: reprompt_truncated_frac == 0.
 """
 
-from trl.experimental.sdpo.sdpo_trainer import SuccessfulRolloutTeacherContextBuilder as _Builder
+from trl.experimental.sdpo.sdpo_trainer import (
+    SuccessfulRolloutTeacherContextBuilder as _Builder,
+    SDPOTrainer as _Trainer,
+)
 
 _orig_tokenize = _Builder._tokenize_teacher_messages
 _orig_build = _Builder.build
+_orig_tokenize_prompts = _Trainer._tokenize_prompts
 
 
 def install_reprompt_guard():
@@ -70,8 +83,38 @@ def install_reprompt_guard():
             self.last_metrics.update(stats)
         return out
 
+    def _tokenize_prompts(self, prompts):
+        # Measure BEFORE the original applies ids[-max_prompt_length:] to STUDENT prompts.
+        # Same head-cutting hazard as the teacher-reprompt bug: an over-length student
+        # prompt loses BOS/system/PROBLEM. Log into the trainer's own per-step _metrics.
+        ids_list = self._tokenize_prompts_untruncated(prompts)
+        cap = self.max_prompt_length
+        if cap is not None:
+            lens = [len(ids) for ids in ids_list]
+            n_trunc = sum(1 for n in lens if n > cap)
+            if n_trunc:
+                mode = "train" if self.model.training else "eval"
+                self._metrics[mode]["prompts/student_prompt_truncated_frac"].append(
+                    n_trunc / max(1, len(lens))
+                )
+                self._metrics[mode]["prompts/student_prompt_len_max"].append(
+                    float(max(lens, default=0))
+                )
+                print(
+                    f"[reprompt-guard] WARNING: {n_trunc}/{len(lens)} STUDENT prompts exceed "
+                    f"max_prompt_length={cap} (longest {max(lens)} tok). Left-truncation "
+                    f"(ids[-N:]) is cutting the HEAD — BOS/system/PROBLEM STATEMENT — so the "
+                    f"student sees a malformed prompt. Raise max_prompt_length or shrink the "
+                    f"prompt.",
+                    flush=True,
+                )
+        return _orig_tokenize_prompts(self, prompts)
+
     _Builder._tokenize_teacher_messages = _tokenize_teacher_messages
     _Builder.build = build
+    _Trainer._tokenize_prompts = _tokenize_prompts
     _Builder._reprompt_guard_installed = True
-    print("[reprompt-guard] installed: teacher-prompt truncation is now measured "
-          "(self_distillation/reprompt_truncated_frac — expect 0)")
+    _Trainer._reprompt_guard_installed = True
+    print("[reprompt-guard] installed: teacher-prompt AND student-prompt truncation are now "
+          "measured (self_distillation/reprompt_truncated_frac + "
+          "prompts/student_prompt_truncated_frac — expect 0)")

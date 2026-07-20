@@ -29,7 +29,8 @@ from sdpo_feedback import FeedbackSDPOTrainer, FeedbackBus, make_feedback_reward
 from sdpo_reprompt_guard import install_reprompt_guard  # noqa: E402
 
 
-def main():
+def build_parser():
+    """Construct the CLI argument parser (extracted so tests can assert defaults)."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="Qwen/Qwen3-8B")
     ap.add_argument("--smoke", action="store_true", help="tiny config to debug integration")
@@ -104,6 +105,34 @@ def main():
                     help="critic model id (default: sdpo_critic.DEFAULT_CRITIC_MODEL)")
     ap.add_argument("--critic-thinking", action="store_true",
                     help="use adaptive thinking for the critic (higher quality, slower/costlier)")
+    # --- paper-faithful SDPO knobs (replication audit, 2026-07) ---------------
+    # An audit of TRL's experimental SDPOConfig against the SDPO paper's ACTUAL
+    # LCBv6 run config (experiments/rich_feedback/run_sdpo.sh in lasgroup/SDPO —
+    # which overrides the method-section prose) found defaults that diverge. We
+    # adopt the run-script values as OUR defaults (except --distillation-is-clip,
+    # kept at TRL's 2.0 to preserve prior behavior) and expose each so a
+    # paper-faithful run is one flag away.
+    ap.add_argument("--teacher-update-rate", type=float, default=0.01,
+                    help="EMA teacher decay (teacher_update_rate). Paper best=0.01 (OUR default); "
+                         "TRL default is 0.05.")
+    ap.add_argument("--distillation-alpha", type=float, default=1.0,
+                    help="divergence interpolation (distillation_alpha): 1.0=reverse KL (paper's "
+                         "LCBv6 run script AND TRL default — OUR default), 0.5=symmetric JSD "
+                         "(paper's method-section prose), 0.0=forward KL.")
+    ap.add_argument("--distillation-topk", type=int, default=20,
+                    help="top-K logits for the distillation support (distillation_topk). Paper's "
+                         "LCBv6 run: K=20 (+ tail bucket); TRL default None; our pre-replication "
+                         "runs hardcoded 100.")
+    ap.add_argument("--distillation-tail", dest="distillation_tail",
+                    action="store_true", default=True,
+                    help="add a tail bucket for non-top-k probability mass (distillation_add_tail). "
+                         "Paper keeps the tail (OUR default: ON); TRL default is OFF.")
+    ap.add_argument("--no-distillation-tail", dest="distillation_tail", action="store_false",
+                    help="drop the tail bucket (TRL default behavior).")
+    ap.add_argument("--distillation-is-clip", default="2.0",
+                    help="importance-sampling clip coefficient (distillation_is_clip). Default 2.0 "
+                         "preserves current behavior; the paper's plain per-token divergence has NO "
+                         "IS correction — pass 'none' (or 0) to disable clipping for a paper-faithful run.")
     # Memory/speed knobs. Defaults are GB10-safe (microbatch=1 + grad ckpt).
     # On a roomier GPU (80 GB H100), --per-device-batch 2+ and/or
     # --no-grad-checkpointing trade memory for a faster step.
@@ -125,7 +154,15 @@ def main():
                          "CUDA graphs on — eager makes it deterministic (~10-20%% slower generation).")
     ap.add_argument("--no-enforce-eager", dest="enforce_eager", action="store_false")
     ap.add_argument("--no-wandb", action="store_true")
+    return ap
+
+
+def main():
+    ap = build_parser()
     args = ap.parse_args()
+    # --distillation-is-clip: accept the literal "none" (or 0) -> None (IS off, paper-faithful).
+    _is_clip = str(args.distillation_is_clip).strip().lower()
+    args.distillation_is_clip = None if _is_clip in ("none", "0", "0.0") else float(args.distillation_is_clip)
     if args.critic:
         args.feedback = True  # the critic rewrites the live feedback signal; it needs the bus
 
@@ -214,8 +251,15 @@ def main():
         # --- SDPO core ---
         distillation_weight=args.distillation_weight,   # hybrid: (1-w)*GRPO + w*SDPO
         distillation_mode="topk_logits",
-        distillation_topk=100,
         teacher_model_kind=args.teacher_kind,           # "base"=fixed/initial (iteration-05 T0)
+        # --- paper-faithful SDPO knobs (replication audit, 2026-07) ---
+        # Defaults follow the paper's LCBv6 RUN SCRIPT (lasgroup/SDPO
+        # experiments/rich_feedback/run_sdpo.sh), not the method-section prose.
+        teacher_update_rate=args.teacher_update_rate,   # paper best=0.01 (TRL default 0.05)
+        distillation_alpha=args.distillation_alpha,     # 1.0=reverse KL (LCBv6 run script; JSD=0.5 is prose-only)
+        distillation_topk=args.distillation_topk,       # LCBv6 run: K=20 (pre-replication runs hardcoded 100)
+        distillation_add_tail=args.distillation_tail,   # paper keeps tail bucket (TRL default False)
+        distillation_is_clip=args.distillation_is_clip, # None=paper's plain per-token divergence (no IS clip)
         use_successful_as_teacher=True,
         success_reward_threshold=args.sdpo_threshold,  # applied to the dense FRACTION (feedback path)
         # --- teacher-context integrity (iteration-11) ---

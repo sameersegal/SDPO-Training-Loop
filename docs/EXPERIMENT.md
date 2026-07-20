@@ -163,6 +163,34 @@ mode (where `passed` is a misleading prefix count). See `docs/design/JUDGE.md` �
   pre-iter-11 gating via `--feedback-only-without-solution`), and `sdpo_reprompt_guard.py` logs
   `self_distillation/reprompt_truncated_frac` (+ len/overflow max) every step and warns loudly on
   any overflow — **pre-flight expectation: 0**. Tests: `tests/test_reprompt_truncation.py`.
+  The guard ALSO wraps the trainer's **student-prompt** tokenizer (`SDPOTrainer._tokenize_prompts`,
+  same `ids[-max_prompt_length:]` head-cutting hazard), logging `prompts/student_prompt_truncated_frac`
+  (+ len max) into the trainer's per-step `_metrics` and warning loudly on any overflow.
+- **Paper-faithful defaults (replication audit, 2026-07).** An audit of TRL's experimental
+  `SDPOConfig` against the paper's **actual LCBv6 run config** (`experiments/rich_feedback/run_sdpo.sh`
+  in lasgroup/SDPO — which *overrides* the method-section prose) found defaults diverging from the
+  paper's headline run; each is now a CLI flag with the run-script value adopted as OUR default
+  (except the IS-clip, kept for continuity):
+
+  | Knob (`SDPOConfig` field) | Paper LCBv6 run | TRL default | Our default / flag |
+  |---|---|---|---|
+  | EMA teacher decay (`teacher_update_rate`) | 0.01 | 0.05 | **0.01** — `--teacher-update-rate` |
+  | Distill divergence (`distillation_alpha`) | 1.0 (reverse KL; run script `ALPHAS=(1.0)`) | 1.0 (reverse KL) | **1.0** — `--distillation-alpha` |
+  | Top-K support (`distillation_topk`) | 20 | None | **20** — `--distillation-topk` (pre-replication runs hardcoded 100) |
+  | Top-K tail bucket (`distillation_add_tail`) | True | False | **True** — `--distillation-tail` / `--no-distillation-tail` |
+  | IS clip (`distillation_is_clip`) | None (plain per-token divergence, no IS) | 2.0 | **2.0** (continuity) — `--distillation-is-clip` (pass `none`/`0` for paper-faithful) |
+
+  **TRAP for future readers — prose vs run script:** the paper's *method section* describes
+  symmetric JSD (`alpha=0.5`), but the LCBv6 headline run script sets `ALPHAS=(1.0)` = reverse KL.
+  We follow the run script (what produced the headline numbers), not the prose. If you do want JSD,
+  note `alpha != 1.0` is only *legal* in our `distillation_mode="topk_logits"` path —
+  `SDPOConfig.__post_init__` rejects it under `sampled_token`.
+  **Three INEXPRESSIBLE deviations we accept:** (a) TRL's top-k is over the **student's** logits,
+  whereas the paper's top-k is **teacher-informed**; (b) TRL has **no trust-region teacher** (the
+  EMA teacher is the closest available surrogate); (c) the paper repo **right-truncates** the
+  reprompt (keeps the problem head) whereas TRL **left-truncates** — harmless for us because our
+  contexts fit whole (the reprompt guard asserts `reprompt_truncated_frac == 0`). None is exposed
+  by `SDPOConfig`; runs stay paper-faithful everywhere else.
 
 ## 8. Evaluation
 

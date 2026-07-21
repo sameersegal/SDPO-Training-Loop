@@ -1,0 +1,1111 @@
+{
+  "summary": {
+    "tag": "repl01sdpo_ckpt40",
+    "judged_offline": true,
+    "by_language": {
+      "python": {
+        "overall": {
+          "n_problems": 63,
+          "pass@1": 0.4266,
+          "pass@2": 0.5017,
+          "pass@4": 0.5599,
+          "pass@8": 0.6032
+        },
+        "easy": {
+          "n_problems": 15,
+          "pass@1": 0.8,
+          "pass@2": 0.8833,
+          "pass@4": 0.919,
+          "pass@8": 0.9333
+        },
+        "medium": {
+          "n_problems": 48,
+          "pass@1": 0.3099,
+          "pass@2": 0.3824,
+          "pass@4": 0.4476,
+          "pass@8": 0.5
+        }
+      }
+    },
+    "overall": {
+      "n_problems": 63,
+      "pass@1": 0.4266,
+      "pass@2": 0.5017,
+      "pass@4": 0.5599,
+      "pass@8": 0.6032
+    }
+  },
+  "results": [
+    {
+      "id": 2314,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 8,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2317,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 8,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2420,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 8,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2423,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 8,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2445,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 6,
+      "verdicts": [
+        "RE",
+        "RE",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2498,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 2,
+      "verdicts": [
+        "WA",
+        "NO_CODE",
+        "NO_CODE",
+        "NO_CODE",
+        "WA",
+        "AC",
+        "WA",
+        "AC"
+      ]
+    },
+    {
+      "id": 2592,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 8,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2596,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 8,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2599,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 7,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "RE",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2602,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 8,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2606,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "TLE",
+        "TLE",
+        "TLE",
+        "TLE",
+        "TLE",
+        "TLE",
+        "TLE"
+      ]
+    },
+    {
+      "id": 2608,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 6,
+      "verdicts": [
+        "AC",
+        "WA",
+        "AC",
+        "AC",
+        "WA",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2611,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 8,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2612,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 6,
+      "verdicts": [
+        "WA",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "TLE"
+      ]
+    },
+    {
+      "id": 4001,
+      "language": "python",
+      "difficulty": "easy",
+      "n": 8,
+      "n_ac": 5,
+      "verdicts": [
+        "WA",
+        "WA",
+        "AC",
+        "WA",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2086,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "RE",
+        "RE",
+        "WA",
+        "WA",
+        "WA",
+        "TLE",
+        "TLE",
+        "TLE"
+      ]
+    },
+    {
+      "id": 2129,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 1,
+      "verdicts": [
+        "RE",
+        "RE",
+        "WA",
+        "RE",
+        "RE",
+        "RE",
+        "WA",
+        "AC"
+      ]
+    },
+    {
+      "id": 2130,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "TLE",
+        "TLE",
+        "TLE",
+        "TLE",
+        "TLE",
+        "TLE",
+        "TLE"
+      ]
+    },
+    {
+      "id": 2132,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 2,
+      "verdicts": [
+        "WA",
+        "AC",
+        "WA",
+        "WA",
+        "RE",
+        "RE",
+        "AC",
+        "TLE"
+      ]
+    },
+    {
+      "id": 2246,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "TLE",
+        "TLE",
+        "TLE",
+        "TLE"
+      ]
+    },
+    {
+      "id": 2294,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 7,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "RE",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2296,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "RE",
+        "WA",
+        "WA",
+        "TLE"
+      ]
+    },
+    {
+      "id": 2297,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "NO_CODE",
+        "WA",
+        "TLE"
+      ]
+    },
+    {
+      "id": 2315,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "RE",
+        "RE",
+        "WA",
+        "NO_CODE",
+        "WA",
+        "WA",
+        "WA",
+        "WA"
+      ]
+    },
+    {
+      "id": 2352,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 8,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2360,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 2,
+      "verdicts": [
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "NO_CODE",
+        "WA",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2361,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 7,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "TLE"
+      ]
+    },
+    {
+      "id": 2362,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "TLE",
+        "TLE"
+      ]
+    },
+    {
+      "id": 2363,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "WA",
+        "TLE",
+        "TLE",
+        "RE",
+        "RE",
+        "TLE",
+        "WA"
+      ]
+    },
+    {
+      "id": 2415,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 2,
+      "verdicts": [
+        "RE",
+        "WA",
+        "RE",
+        "WA",
+        "WA",
+        "AC",
+        "WA",
+        "AC"
+      ]
+    },
+    {
+      "id": 2416,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "TLE"
+      ]
+    },
+    {
+      "id": 2422,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "NO_CODE",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "TLE"
+      ]
+    },
+    {
+      "id": 2424,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "NO_CODE",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA"
+      ]
+    },
+    {
+      "id": 2499,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 6,
+      "verdicts": [
+        "AC",
+        "NO_CODE",
+        "AC",
+        "AC",
+        "AC",
+        "WA",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2500,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "NO_CODE",
+        "WA",
+        "RE",
+        "RE",
+        "WA",
+        "WA",
+        "WA",
+        "WA"
+      ]
+    },
+    {
+      "id": 2503,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "RE",
+        "RE",
+        "RE",
+        "RE",
+        "WA",
+        "RE",
+        "WA",
+        "WA"
+      ]
+    },
+    {
+      "id": 2589,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 6,
+      "verdicts": [
+        "AC",
+        "WA",
+        "WA",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2590,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 4,
+      "verdicts": [
+        "WA",
+        "AC",
+        "AC",
+        "WA",
+        "WA",
+        "AC",
+        "AC",
+        "WA"
+      ]
+    },
+    {
+      "id": 2591,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "WA",
+        "TLE",
+        "TLE",
+        "TLE",
+        "TLE",
+        "TLE",
+        "TLE"
+      ]
+    },
+    {
+      "id": 2593,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 8,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2594,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 7,
+      "verdicts": [
+        "AC",
+        "AC",
+        "WA",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2595,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA"
+      ]
+    },
+    {
+      "id": 2597,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 2,
+      "verdicts": [
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2598,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "TLE"
+      ]
+    },
+    {
+      "id": 2600,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA"
+      ]
+    },
+    {
+      "id": 2601,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "RE",
+        "WA",
+        "WA",
+        "WA",
+        "RE",
+        "WA",
+        "WA"
+      ]
+    },
+    {
+      "id": 2603,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 2,
+      "verdicts": [
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "AC",
+        "AC",
+        "WA"
+      ]
+    },
+    {
+      "id": 2605,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 7,
+      "verdicts": [
+        "WA",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2609,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA"
+      ]
+    },
+    {
+      "id": 2610,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 8,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2667,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 5,
+      "verdicts": [
+        "WA",
+        "AC",
+        "AC",
+        "NO_CODE",
+        "RE",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2670,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 8,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 2951,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 2,
+      "verdicts": [
+        "AC",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "AC"
+      ]
+    },
+    {
+      "id": 2952,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "TLE"
+      ]
+    },
+    {
+      "id": 3008,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 7,
+      "verdicts": [
+        "WA",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 3386,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 7,
+      "verdicts": [
+        "AC",
+        "RE",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 3387,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "TLE",
+        "TLE",
+        "TLE",
+        "TLE"
+      ]
+    },
+    {
+      "id": 3565,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 1,
+      "verdicts": [
+        "WA",
+        "WA",
+        "RE",
+        "WA",
+        "WA",
+        "RE",
+        "RE",
+        "AC"
+      ]
+    },
+    {
+      "id": 3758,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 8,
+      "verdicts": [
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC",
+        "AC"
+      ]
+    },
+    {
+      "id": 3896,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 2,
+      "verdicts": [
+        "WA",
+        "AC",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "AC"
+      ]
+    },
+    {
+      "id": 3898,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "NO_CODE",
+        "NO_CODE",
+        "NO_CODE",
+        "NO_CODE",
+        "WA",
+        "WA",
+        "WA",
+        "WA"
+      ]
+    },
+    {
+      "id": 4002,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "RE",
+        "WA",
+        "WA",
+        "RE",
+        "WA",
+        "NO_CODE",
+        "NO_CODE",
+        "NO_CODE"
+      ]
+    },
+    {
+      "id": 4004,
+      "language": "python",
+      "difficulty": "medium",
+      "n": 8,
+      "n_ac": 0,
+      "verdicts": [
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA",
+        "WA"
+      ]
+    }
+  ]
+}

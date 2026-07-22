@@ -1,0 +1,28 @@
+{
+ "steps": [
+  0,
+  5,
+  10,
+  15
+ ],
+ "val_acc_mean_at_4": [
+  0.5241,
+  0.5435,
+  0.5719,
+  0.5939
+ ],
+ "base_anchor_note": "step-0 = after 1 step @ lr 1e-6 (~nil perturbation)",
+ "train_score_band": [
+  0.2,
+  0.48
+ ],
+ "response_len_mean_band_tokens": [
+  660,
+  800
+ ],
+ "paper_refs": {
+  "sdpo_endpoint": 0.488,
+  "grpo_endpoint": 0.412,
+  "base": "~0.33 (their harness)"
+ }
+}

@@ -135,8 +135,10 @@ Figures: `python src/generate_slides.py` (set `ITER=iteration-NN`); cross-iterat
   keep visibility/resume AND speed on a real GPU is **concurrent generation with per-completion writes**
   (`gen_rollouts.py --concurrent K`, vLLM v1 `AsyncLLM`): all requests run in vLLM's continuous batch,
   each writes the instant *it* finishes. Serial (`--concurrent 1`) is only the GB10 default because the
-  GB10 hangs on high concurrency *and* batching buys it ~nothing there (aggregate ~14 tok/s ≈
-  single-stream ~13 — a GB10 LPDDR-bandwidth artifact, **NOT a general truth**). On the H200 the KV
+  GB10 hangs on high concurrency multi-sample (n>1 per request). **Revised (env-diff, 2026-07): modest
+  concurrency with n=1 per request scales ~linearly to K=8 (104 tok/s aggregate vs 13 serial) at
+  fill-phase; the ceiling is LPDDR bandwidth (~100 tok/s, easing to ~65 at long contexts)** — use
+  `--concurrent 8`/n=1 on the GB10, not serial. On the H200 the KV
   cache showed **~45× concurrency at 16k**, so serial would waste most of the GPU — use `--concurrent`
   there (the Modal `gen` entrypoint defaults to 12). Same rule for eval sweeps.
 - **Serve the adapter via `vllm --enable-lora`, NOT a merged checkpoint.** Eval base and adapter on
